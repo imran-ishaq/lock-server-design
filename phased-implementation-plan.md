@@ -17,7 +17,7 @@ Each phase preserves backward compatibility with previously accepted records. Ad
 
 **Delivers attributable, tamper-evident evidence that can be correlated across producers, with ingestion-time integrity findings visible.** This is the full scope of `Lock-Server-TRACE-MVP-Design.md`.
 
-- **Signed record ingestion** — single-record (`POST /api/v1/audit/trace`) and **bulk** (`POST /api/v1/audit/trace/bulk`, one producer per batch, per-record accept/reject); bulk is in the MVP because a high-throughput producer such as Cedarling emits thousands of decisions per second.
+- **Signed record ingestion** — single-record (`POST /api/v1/audit/trace`) and **bulk** (`POST /api/v1/audit/trace/bulk`, one producer per batch, per-record accept/reject), over REST and gRPC; bulk is in the MVP because a high-throughput producer such as Cedarling emits thousands of decisions per second. An optional batch-ingest mode (`batchIngestEnabled`, off by default) writes the receipt entries and records of one request in one database transaction on SQL backends, with the same per-record results (MVP design §9.1).
 - **Administrative producer-key registration** — keys provisioned out of band through an admin-scoped API (`trace.admin`), scoped by `authorized_event_kinds`, never registered implicitly from a record; admission runs and persists the key-state checks (see `Lock-Server-TRACE-MVP-Design.md` §12).
 - **Lock-derived evidence-domain isolation** — `evidence_domain_id` from the authenticated client, never the record body.
 - **Signature, identity, and schema validation** — Ed25519 over RFC 8785 (JCS), `kid`-selected key, and the `signature_valid`/`identity_sound` admission gates.

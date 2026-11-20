@@ -38,6 +38,7 @@ The authorization decision and capability invocation should come from different 
 
 - OAuth-protected single-record ingestion.
 - OAuth-protected bulk ingestion (`POST /api/v1/audit/trace/bulk`), one producer per batch, with per-record accept/reject — required because a high-throughput producer such as Cedarling cannot scale with one request per record (see §11.2).
+- An optional batch-ingest write mode (`batchIngestEnabled`, off by default) that writes the receipt entries and records of one request in one database transaction where the store supports it, with the same per-record results as the default path (§9.1).
 - Per-evidence-domain producer-key registration through an admin API under a separate scope (`trace.admin`), never implicitly from a submitted record.
 - Producer-chain registration, either through the admin API (`pre_registered_genesis`) or from a chain's genesis record (`first_observed_genesis`), selected by Lock configuration (§8).
 - Ed25519 signatures selected by signed `kid`.
@@ -132,7 +133,7 @@ The MVP has five logical components:
 | Verification service | Validate schema, resolve `(evidence_domain_id, producer_id, kid)`, canonicalize, and verify the signature. |
 | Producer key registry | Store trusted Ed25519 public keys and validity/revocation metadata per evidence domain. |
 | Correlation service | Validate producer-chain position and create direct execution, capability, producer, and token indexes. |
-| TRACE store | Persist the assertion, verification metadata, and ingestion metadata, and claim and settle the receipt-chain entry (§9). |
+| TRACE store | Persist the assertion, verification metadata, and ingestion metadata, and write the receipt-chain entry: claimed and settled per record (§9), or inserted in one transaction with the records in batch-ingest mode (§9.1). |
 
 Processing order is fixed:
 
@@ -144,8 +145,10 @@ Processing order is fixed:
 6. Verify the Ed25519 signature over the JCS form of every assertion field except `signature`.
 7. Compute `content_digest` over the JCS form of the complete assertion, including `signature`.
 8. Apply idempotency, conflict, chain-registration (§8), chain-gap, and equivocation checks.
-9. Claim a Lock receipt position, store the record, then settle the receipt entry (§9).
+9. Write the record and its Lock receipt entry. On the per-record path, claim a receipt position, store the record, then settle the receipt entry (§9). In batch-ingest mode, reserve a contiguous range of receipt positions and insert the receipt entries and records of the request in one transaction (§9.1).
 10. Return the acceptance result.
+
+In batch-ingest mode, steps 3–7 run for every element of the request first, without holding any lock. Steps 8–9 then run for the verified elements in array order, and each element is planned as if the earlier valid elements of the same request were already stored. Each element gets the result it would get as a separate submission made in array order.
 
 Unverified records MUST NOT enter the normal TRACE store or any retrieval index. An implementation may place them in a separately access-controlled quarantine.
 
@@ -373,7 +376,9 @@ In both modes a **non-genesis record on an unregistered chain is rejected** with
 
 **Cedarling deployment patterns.** The MVP recognizes that the producer's longevity and key custody vary by deployment: **embedded/server Cedarling** — the host supplies the key and durable chain state; **sidecar Cedarling** — the sidecar owns the key and one or more chain writers; **ephemeral pod** — uses a fleet or workload-provisioned key and opens a `first_observed_genesis` chain for that pod/writer; **WASM Cedarling** — preferably returns the assertion to a trusted host for signing, since a browser-held key provides weaker producer assurance and is classified accordingly. The rule throughout: keys identify trusted producers, chains identify independently-sequenced record streams, and versions describe software — they are not the same identifier.
 
-Within a registered chain, records may arrive out of order. A missing predecessor does not cause rejection: Lock accepts the record with `coverage_gap_flag: true` and clears that derived condition when the missing position arrives and links correctly. A present but nonmatching predecessor is a different case: Lock accepts the record with `chain_link_failure_flag: true`, a genuine chain-link break rather than a pending gap. Unlike a coverage gap, this flag is **not** self-clearing — the conflicting predecessor is already present, so later arrival cannot resolve it — and it remains visible as an integrity finding.
+Within a registered chain, records may arrive out of order. A missing predecessor does not cause rejection: Lock accepts the record with `coverage_gap_flag: true` and clears that derived condition when the missing position arrives and links correctly. A present but nonmatching predecessor is a different case: Lock accepts the record with `chain_link_failure_flag: true`, a genuine chain-link break rather than a pending gap. Unlike a coverage gap, this flag is **not** self-clearing — the conflicting predecessor is already present, so later arrival cannot resolve it — and it remains visible as an integrity finding. When several records hold the predecessor position (equivocation), one whose `content_digest` matches `prev_record_hash` is enough. Lock checks a record when it arrives and again each time a record arrives at its predecessor position, against all records present there at that time; once set, the flag stays, so a matching predecessor that arrives after a nonmatching one does not clear it.
+
+**Flag maintenance.** Lock computes a new record's flags from the chain as it was before the record was written, then updates the derived flags of neighboring records. Each neighbor update is a compare-and-swap on that record, retried up to `correlationRetryLimit` times on a version conflict; it is best-effort and never fails the request. After the write Lock reads the predecessor, own, and successor positions once more, so a neighbor that another request or node stored at the same time is not missed: Lock corrects the new record's own `coverage_gap_flag` (only clearing it) and `chain_link_failure_flag` (only setting it), and corrects a successor that arrived meanwhile. The acceptance response reports the flags the record was stored with, on both write paths (§9), so a reader can see a flag change shortly after acceptance. In batch-ingest mode these updates can run after the response, on a bounded pool (`postCommitCorrelationThreads`, §9.1); updates still queued when Lock stops are lost, and nothing repairs them later.
 
 If independently valid records with different `record_id` values claim the same `(evidence_domain_id, producer_id, producer_instance_id, producer_chain_id, sequence_number)`, Lock stores and flags both records as equivocation. It never silently selects a winner. This differs from reuse of the same `record_id`, which is a content conflict and cannot create two records under one primary key.
 
@@ -399,9 +404,47 @@ The receipt-entry hash MUST bind at least:
 
 The list is closed for the receipt profile `tag:jans.io,2026:lock-trace-receipt-v1`: the hash is `sha256:` plus lowercase hex SHA-256 of the JCS form of exactly these members and `receipt_profile`, nothing else.
 
-**Receipt entries are not written atomically with the record.** The storage layer offers per-entry compare-and-swap and unique inserts, but no multi-entry transaction. Lock therefore claims a receipt position as a `PENDING` entry, stores the record, and settles the entry as `COMMITTED`; a failed request settles it `VOID`, and a repair timer settles entries left `PENDING` by a stopped node. The entry state is not part of the receipt hash, so a `VOID` entry keeps the chain dense and verifiable: it is a position Lock allocated and abandoned, not a gap. A failed request leaves no stored record and no index entry, but may leave a `VOID` receipt entry. In one rare race (a worker that stalls past its deadline) a record is stored under a `VOID` entry; Lock keeps the record, fails the request, and its identity stays blocked until an operator acts.
+**Two write paths.** The storage layer (the Jans ORM) offers per-entry compare-and-swap and unique inserts on every backend, and an atomic insert of several entries in one transaction on the SQL backend (PostgreSQL, MySQL) only. It has no general multi-entry transaction and no sequence allocator. Lock therefore writes a record and its receipt entry in one of two ways, into the same receipt chain:
+
+- **Per-record path (default).** Lock claims a receipt position as a `PENDING` entry, stores the record, and settles the entry as `COMMITTED`; a failed request settles it `VOID`, and a repair timer settles entries left `PENDING` by a stopped node. The record and its receipt entry are separate writes. A failed request leaves no stored record and no index entry, but may leave a `VOID` receipt entry. In one rare race (a worker that stalls past its deadline) a record is stored under a `VOID` entry; Lock keeps the record, fails the request, and its identity stays blocked until an operator acts.
+- **Batch path (`batchIngestEnabled`, §9.1).** Lock reserves a contiguous range of positions and inserts the receipt entries, already `COMMITTED`, together with the records, in one transaction. A batch never leaves a `PENDING` or `VOID` entry: a failed transaction stores nothing, and its records fall back to the per-record path.
+
+The entry state is not part of the receipt hash, so a `VOID` entry keeps the chain dense and verifiable: it is a position Lock allocated and abandoned, not a gap.
+
+Both paths allocate positions the same way. A node reads the highest receipt entry of the domain, in any state, proposes the next position or positions, and inserts under the unique key `(evidence_domain_id, receipt_sequence)`; a node that loses the race re-reads and retries. There is no separate chain-head row. Because the unique position is the only arbiter, nodes on either path can write the same evidence domain at the same time. The derived indexes (§13) are attributes of the record entry, so they are written with the record.
 
 This chain makes local insertion, deletion, and rewriting detectable during verification. Without signed checkpoints or an independent external anchor, it does not prove integrity against a Lock operator able to rewrite the entire chain. The API and documentation must not overstate that guarantee.
+
+### 9.1 Batch ingest
+
+Batch ingest is an opt-in write mode for both transports: over REST for `POST /api/v1/audit/trace/bulk` and `POST /api/v1/audit/trace`, and over gRPC for `TraceService/SubmitBulkRecords` and `TraceService/SubmitRecord` (§11.6). The gRPC methods hand the exact signed bytes to the same ingestion code as REST, so the setting, the write path, and the results are the same on both. It changes how Lock writes, not what Lock accepts: request and response shapes, status codes, error ids and reasons, receipt fields, flags, and stored rows are the same as on the per-record path. Lock uses it only when `batchIngestEnabled` is on, the store supports atomic batch inserts, and the configured crypto provider is available; otherwise every request takes the per-record path.
+
+For one request Lock:
+
+1. **Verifies** every element (§5 steps 3–7) without holding any lock, optionally in parallel (`batchVerifyThreads`). A failing element is rejected on its own. A producer key is read from the store once per request and reused for later elements that name the same `(producer, kid)`; its validity window and revocation are still judged for every element, only a key that verified an element is reused, and nothing is kept after the request, so a key revoked during one request is seen by the next.
+2. **Plans** the verified elements in array order. An element whose identity is already stored, or planned earlier in the request, is classified as an idempotent replay or a `409` conflict. The others get their chain position and flags (§8) as if the earlier elements of the request were already stored, so a chain of many records in one request gets the same flags as when the records arrive one by one.
+3. **Commits** the N new records: Lock reserves the next N receipt positions of the evidence domain and inserts the N receipt entries and the N records in one transaction. The new records get consecutive receipt sequences in array order. A replay keeps its original sequence, and a rejected element gets none.
+4. **Correlates** after the commit: the neighbor-flag updates of §8, in array order, on the request thread or on a bounded pool (`postCommitCorrelationThreads`).
+
+A single submission made while batch ingest is on goes through the same steps as a batch of one: one transaction instead of the three commits (claim, insert, settle) of the per-record path.
+
+**Contention.** Compare-and-swap on the unique receipt position stays the multi-node protocol. If another writer took one of the positions first, the transaction rolls back and nothing is stored; Lock waits a random backoff and retries the range from a fresh head, up to `rangeAllocationRetryLimit` attempts. An identity that another request stored meanwhile with the same content becomes a replay and is dropped from the retry; if it was stored with different content, later plans of the request may depend on it, so the request falls back to the per-record path, which reports that element as `record_conflict`. Inside one node a per-domain lock serializes range reservation and the transaction; it is released during the backoff.
+
+**Fallback and fail-closed.** If the transaction fails for any other reason, or the range attempts run out, Lock processes the unfinished elements one by one on the per-record path, so one failing row never fails its neighbors and each element gets the per-record result. If the request thread is interrupted during a backoff (for example while Lock stops), Lock stores nothing more for that request and fails the unfinished elements with `500 storage_failure`, reason `receipt_allocation_interrupted`, without the fallback. On both paths a record is reported accepted only after its rows are committed, and a receipt position is never reused.
+
+**Limits.** The ORM accepts at most 1000 entries in one atomic batch and every element needs two (its receipt entry and its record), so `maxBulkRecords` should stay at 500 or below while batch ingest is on. A larger request is not written as one transaction: Lock logs `batch_too_large` and falls back to the per-record path.
+
+**Rollout.** Lock reads the setting on every request and picks up a changed dynamic configuration within about 30 seconds, without a restart. Rows written by the batch path are ordinary `COMMITTED` receipt entries and records: turning the mode off needs no cleanup, and a replay is answered the same way on both paths.
+
+| Setting (`traceConfiguration`) | Default | Meaning |
+|---|---|---|
+| `batchIngestEnabled` | `false` | Use the batch path for bulk and single submissions. |
+| `batchVerifyThreads` | `0` | Threads that verify the elements of one request in parallel; `0` uses the request thread. At most 64. |
+| `postCommitCorrelationThreads` | `0` | Threads for the post-commit flag updates; with a pool the response does not wait for them (§8). At most 64. |
+| `rangeAllocationRetryLimit` | `32` | Range attempts, the first included, before the fallback. |
+| `rangeAllocationBackoffMs`, `rangeAllocationMaxBackoffMs` | `5`, `250` | Before retry k Lock waits a uniformly random time up to `min(base × 2^(k−1), cap)` ms; a base of `0` disables the wait. |
+
+`receiptAllocationRetryLimit` (default 8) still bounds the per-record path. On one 8-vCPU test VM with PostgreSQL, bulk requests of 100 records reached about 6,000–7,200 records/s per evidence domain and Lock node with batch ingest, against about 370 records/s on the per-record path, which waits for about three database commits per record. These are test measurements, not guarantees. The Jans documentation (`docs/janssen-server/lock/trace.md`, "Batch ingest") holds the operator guidance and the measured sizing; open scaling questions are in `trace-mvp-post-mvp.md` §3.2.
 
 ## 10. Stored envelope
 
@@ -425,6 +468,7 @@ Lock stores three clearly separated parts:
     "receipt_sequence": 108422,
     "received_at": "2026-06-11T00:41:02.123Z",
     "prev_receipt_hash": "sha256:...",
+    "receipt_hash": "sha256:...",
     "coverage_gap_flag": false,
     "chain_link_failure_flag": false,
     "equivocation_flag": false,
@@ -437,7 +481,7 @@ Lock stores three clearly separated parts:
 }
 ```
 
-Lock also keeps the exact accepted request text as `assertion_raw` and returns it on retrieval next to the parsed `assertion`; when the two differ, `assertion_raw` decides. Two flags extend the MVP set:
+Lock also keeps the exact accepted request text as `assertion_raw` and returns it on retrieval next to the parsed `assertion`; when the two differ, `assertion_raw` decides. `receipt_hash` is the hash of the record's receipt entry (§9). `receipt_state` is not stored with the record: Lock reads it from the receipt entry when it builds a response. It is `COMMITTED`, `PENDING` for the short time before the per-record path settles the entry, or `VOID` only for a record stored by the late-insert race of §9. Two flags extend the MVP set:
 
 - `policy_mismatch_flag`: the record's `trace.policy` names a policy store that Lock serves, with a `bundle_hash` (SHA-256 of the archive bytes Lock serves) that no Lock node served at the time the record is judged, within a grace window; or a matching release whose known `policy_store_version` differs from the record's. Lock still accepts the record; a store Lock does not serve is never compared.
 - `reserved_member_flag`: the producer signed a member Lock derives itself (such as `evidence_domain_id`, `capability_ids`, or a flag). Lock ignores it, uses its own value, and lists the paths in `reserved_members`.
@@ -461,6 +505,8 @@ Content-Type: application/json
 Required scope:
 
 `https://jans.io/oauth/lock/trace.write`
+
+The same operation is served over gRPC as `TraceService/SubmitRecord` (§11.6), with the same scope, validation, receipt, and results.
 
 Success response:
 
@@ -506,7 +552,7 @@ Return `202 Accepted` only after verification and persistence succeed. Use `400`
 | `record_conflict` | 409 | Same record identity, different `content_digest`. |
 | `ambiguous_identifier` | 409 | An unscoped lookup matches several producers or authorities. |
 | `key_already_exists`, `chain_already_exists`, `invalid_key` | 409 / 409 / 400 | Admin API (§6). |
-| `storage_failure` | 500 | Persistence or receipt allocation failed (§9); `reason` names the case. |
+| `storage_failure` | 500 | Persistence or receipt allocation failed (§9); `reason` names the case: `receipt_allocation_exhausted` (no position or range within the retry limits; on the batch path only when the per-record fallback also runs out), `receipt_allocation_interrupted` (batch path, interrupted during a range backoff, §9.1), `batch_verification_abandoned` (Lock stopped while the element waited on the verification pool), `receipt_claim_expired`, `race_record_missing`, or `receipt_void_after_insert` (per-record path, §9). Only `receipt_void_after_insert` leaves a stored record. |
 | `crypto_unavailable` | 500 | The configured crypto implementation is unavailable (§14); Lock fails closed. |
 
 ### 11.2 Submit a batch of records
@@ -521,9 +567,11 @@ Required scope:
 
 `https://jans.io/oauth/lock/trace.write`
 
-Bulk ingestion is **in the MVP** because a high-throughput producer such as Cedarling can make thousands of decisions per second, and one HTTP request per record (§11.1) does not scale to that. The batch amortizes transport and lets a producer reuse its existing buffered, periodic shipping channel. The batch body is an array of signed TRACE records, **one producer per batch** (every record shares the same signed `producer`/`producer_chain.producer_id`; a batch mixing producers is rejected). A configurable maximum batch size applies: `maxBulkRecords` (default 100) and `maxBulkRequestBytes` (default 4 MiB, never above 16 MiB); each record is still bounded by the single-record limit (see §14).
+The same operation is served over gRPC as `TraceService/SubmitBulkRecords` (§11.6). Its request carries the exact bytes of the JSON array, and Lock applies the same envelope checks, per-record processing, write path (§9, §9.1), and per-record results as over REST.
 
-**Per-record, not all-or-nothing.** Lock verifies, correlates, persists, and applies the ingestion-integrity flags (coverage-gap, chain-link-failure, equivocation, late-arrival) to **each record independently**, exactly as for a single submission — a batch is N independent §11.1 ingestions sharing one request, each stored as in §9, not one transaction over the whole batch. A failure on one record (bad signature, unknown/unauthorized key, `409` identity conflict, storage failure) does **not** reject the other, independently-valid records. There is no cross-record coupling; each record is admitted and flagged on its own. (The MVP runs no settlement — settlement assessments and receipts are a later phase, see §3 and §16 — so there is no settlement pass, per-record or batch-level, to run here.)
+Bulk ingestion is **in the MVP** because a high-throughput producer such as Cedarling can make thousands of decisions per second, and one HTTP request per record (§11.1) does not scale to that. The batch amortizes transport and lets a producer reuse its existing buffered, periodic shipping channel. The batch body is an array of signed TRACE records, **one producer per batch** (every record shares the same signed `producer`/`producer_chain.producer_id`; a batch mixing producers is rejected). A configurable maximum batch size applies: `maxBulkRecords` (default 100) and `maxBulkRequestBytes` (default 4 MiB, never above 16 MiB); each record is still bounded by the single-record limit (see §14). With batch ingest on, keep `maxBulkRecords` at 500 or below (§9.1). An element without a readable `producer` is not counted by the one-producer check and fails on its own.
+
+**Per-record results, not all-or-nothing.** Lock verifies, correlates, persists, and applies the ingestion-integrity flags (coverage-gap, chain-link-failure, equivocation, late-arrival) to **each record on its own merits**: each record gets the result it would get as a single §11.1 submission made in array order, and a later record sees the earlier valid records of the request as already stored. A failure on one record (bad signature, unknown/unauthorized key, `409` identity conflict, storage failure) does **not** reject the other, independently-valid records; admission has no cross-record coupling. How the records are written depends on the write path (§9). On the per-record path each record is stored with its own receipt claim, three commits per record. With batch ingest (§9.1) the new records of the request and their receipt entries are written in one database transaction; if that transaction fails, the records fall back to the per-record path, so one failing row still does not fail its neighbors. (The MVP runs no settlement — settlement assessments and receipts are a later phase, see §3 and §16 — so there is no settlement pass, per-record or batch-level, to run here.)
 
 Success response is a per-record result array in submission order:
 
@@ -536,7 +584,7 @@ Success response is a per-record result array in submission order:
 }
 ```
 
-Lock returns `207 Multi-Status` whenever the batch was processed, whatever the per-record results; `index` is the position in the submitted array, and a per-record `error` uses the §11.1 error body. For the batch as a whole, `400 invalid_request` is returned only when TRACE is disabled (`trace_disabled`, §11.7) or the **batch envelope** itself is malformed, with a `reason`: not JSON, not an array (`not_array`), empty (`empty_bulk_records`), too many records (`max_bulk_records_exceeded`), too large (`bulk_body_too_large`), or mixed producers (`bulk_mixed_producers`); `401`/`403` for OAuth failures, `403 client_not_bound` when the client resolves to no evidence domain, and `500` only when Lock could not process the batch at all. Each accepted record's receipt is assigned exactly as in §11.1, and replay/`409`/gap/equivocation semantics are per-record and identical to the single-record path. Records within one batch MAY advance the producer chain across several `producer_chain_id` lanes (see §8), so batching never forces one serialized sequence allocator.
+Lock returns `207 Multi-Status` whenever the batch was processed, whatever the per-record results; `index` is the position in the submitted array, and a per-record `error` uses the §11.1 error body. For the batch as a whole, `400 invalid_request` is returned only when TRACE is disabled (`trace_disabled`, §11.7) or the **batch envelope** itself is malformed, with a `reason`: not JSON, not an array (`not_array`), empty (`empty_bulk_records`), too many records (`max_bulk_records_exceeded`), too large (`bulk_body_too_large`), or mixed producers (`bulk_mixed_producers`); `401`/`403` for OAuth failures, `403 client_not_bound` when the client resolves to no evidence domain, and `500` only when Lock could not process the batch at all. Each accepted record's receipt is assigned exactly as in §11.1, and replay/`409`/gap/equivocation semantics are per-record and identical to the single-record path. Receipt sequences follow array order but need not be contiguous: a rejected record claims none. With batch ingest, the new records stored by one successful transaction get consecutive sequences; after a fallback to the per-record path, other writers can take positions between them. Resubmitting a whole array is safe: records already committed replay idempotently. Records within one batch MAY advance the producer chain across several `producer_chain_id` lanes (see §8), so batching never forces one serialized sequence allocator.
 
 
 ### 11.3 Retrieve one record
@@ -573,7 +621,7 @@ Required scope: `https://jans.io/oauth/lock/trace.readonly`. Returns, in receipt
 
 ### 11.6 gRPC transport
 
-The same operations are served over gRPC by `io.jans.lock.trace.TraceService` (`SubmitRecord`, `SubmitBulkRecords`, `GetRecord`, `SearchRecords`, `GetExecution`) and `io.jans.lock.trace.TraceAdminService` (the §6 admin operations). They run the same code as REST, with the same scopes, evidence domains, receipts, and error ids. Assertions travel as the exact signed bytes, never re-serialized. A REST status maps to the matching gRPC status (`400` → `INVALID_ARGUMENT`, `401` → `UNAUTHENTICATED`, `403` → `PERMISSION_DENIED`, `404` → `NOT_FOUND`, `409` → `ALREADY_EXISTS`, `500` → `INTERNAL`; `ambiguous_identifier` → `FAILED_PRECONDITION`), with the §11.1 error body as the status description.
+The same operations are served over gRPC by `io.jans.lock.trace.TraceService` (`SubmitRecord`, `SubmitBulkRecords`, `GetRecord`, `SearchRecords`, `GetExecution`) and `io.jans.lock.trace.TraceAdminService` (the §6 admin operations). They run the same code as REST, with the same scopes, evidence domains, receipts, and error ids. Assertions travel as the exact signed bytes, never re-serialized. A REST status maps to the matching gRPC status (`400` → `INVALID_ARGUMENT`, `401` → `UNAUTHENTICATED`, `403` → `PERMISSION_DENIED`, `404` → `NOT_FOUND`, `409` → `ALREADY_EXISTS`, `500` → `INTERNAL`; `ambiguous_identifier` → `FAILED_PRECONDITION`), with the §11.1 error body as the status description. Single and bulk submissions over gRPC use the per-record or batch write path exactly as REST does (§9.1). Lock accepts inbound gRPC messages of up to `maxBulkRequestBytes` plus 64 KiB of envelope (at least 10 MiB in the servlet `bridge` mode); a bulk body over `maxBulkRequestBytes` but inside that limit fails with `INVALID_ARGUMENT`, and a larger message is rejected by gRPC itself with `RESOURCE_EXHAUSTED`.
 
 ### 11.7 Discovery
 
@@ -598,7 +646,7 @@ When TRACE is enabled, Lock's configuration document (`/.well-known/lock-server-
 | Present predecessor with wrong digest | Accept and flag the chain-link failure; never report the chain as intact. |
 | Same chain position, different `record_id`, and valid signatures | Store and flag both records as equivocation; never select one silently. |
 | Record received substantially later than `signed_at` | Accept and set `late_flag: true` under a configurable lateness policy; lateness alone is not a rejection reason. |
-| Storage or receipt append failure | Fail the request with `500 storage_failure`; no record or index entry may remain visible, except in the rare race described in §9. An allocated receipt position is settled `VOID` and stays in the receipt chain (§9). |
+| Storage or receipt append failure | Fail the request with `500 storage_failure`; no record or index entry may remain visible, except in the rare race described in §9. On the per-record path an allocated receipt position is settled `VOID` and stays in the receipt chain (§9). A failed batch transaction stores nothing and allocates nothing; its records fall back to the per-record path (§9.1). |
 
 ## 13. Minimum storage keys and indexes
 
@@ -619,6 +667,7 @@ Capability resolution and the capability index (`(evidence_domain_id, capability
 - Derive the evidence domain before any key lookup or content-based routing.
 - Apply maximum request size, nesting depth, string length, array length, and object member count before expensive cryptographic processing. Lock defaults: 256 KiB per record, depth 32, strings of 8192 characters, 256 array elements, 256 object members.
 - Apply a maximum **batch size** (record count) and a maximum batch body size to `POST /api/v1/audit/trace/bulk` before cryptographic processing; a batch exceeding either is rejected with `400` at the envelope level, never partially processed past the limit.
+- Acknowledge a record only after its rows are committed, on both write paths (§9). Never reuse a receipt position. A batch that cannot commit falls back to the per-record path, or fails closed when interrupted; it never drops or duplicates evidence (§9.1).
 - Use constant-time cryptographic implementations and approved Ed25519 libraries. Lock has two interchangeable implementations, selected by `cryptoProvider`: `JAVA` (BouncyCastle, the default) and `NATIVE` (`jans-trace-core` through its `jans-trace-java` binding, `jans-trace-core-mvp-design.md` §9). Both produce the same `content_digest`, key thumbprint, and receipt hash. The selected one must load and pass its self-test; otherwise every submission fails with `500 crypto_unavailable`, with no fallback to the other.
 - Never log raw bearer tokens or sensitive token claims.
 - Preserve the original assertion and the exact verifying `kid` for historical verification.
@@ -642,16 +691,17 @@ The MVP is complete when all of the following tests pass:
 9. Equivocation at one producer-chain position is visible and no conflicting record is silently preferred.
 10. Execution retrieval never crosses an evidence domain and never silently guesses among ambiguous authorities.
 11. The authorization decision and enforcement-point invocation can be retrieved under the same execution.
-12. A failed write leaves neither a visible record nor an index entry (except the rare race in §9); a receipt position it allocated is settled `VOID` and the receipt chain still verifies.
+12. A failed write leaves neither a visible record nor an index entry (except the rare race in §9); on the per-record path a receipt position it allocated is settled `VOID` and the receipt chain still verifies, and a failed batch transaction leaves no receipt entry at all.
 13. A record lookup never returns a matching identifier from another evidence domain.
 14. An unscoped record or execution lookup with several in-domain matches returns an ambiguity error rather than selecting one.
 15. A record signed by a key not authorized for its `producer_id`, or whose `event_kind` is outside the key's `authorized_event_kinds`, is rejected and never appears in normal retrieval — exactly as an unknown key is.
 16. A stored record's recorded admission decision (`signature_valid`, `key_thumbprint`, `key_authorized`) is fixed at `verified_at`: later re-scoping, revocation, or validity-window changes to the key never rewrite it for an already-stored record.
 17. A `POST /api/v1/audit/trace/bulk` batch with a mix of valid and invalid records accepts every valid record and rejects every invalid one on its own merits, each with its own per-record result and receipt; one record's failure never rejects an independently-valid record in the same batch, and a batch mixing producers is rejected at the envelope level.
+18. With batch ingest on (§9.1), single and bulk submissions give the same per-record results, flags, and stored records as the per-record path; the new records of one successful batch transaction hold consecutive receipt sequences; and a failed batch transaction stores nothing and leaves every element to the per-record path, or fails it closed when interrupted.
 
 ## 16. Later phases
 
-The concrete items the Jans MVP implementation deferred, with the condition for returning to each, are listed in `trace-mvp-post-mvp.md`.
+The concrete items the Jans MVP implementation deferred, with the condition for returning to each, are listed in `trace-mvp-post-mvp.md`, including scaling one evidence domain beyond one Lock node.
 
 Phase 2 can add signed settlement assessments, receipt checkpoints, richer retrieval, token claims captured at decision time, and operation-binding commitments (including proof-of-possession binding). Phase 3 can add completeness and assurance profiles, delegation and authorization-state analysis, lineage validation, external transparency, and Evidence Packets for offline verification.
 
