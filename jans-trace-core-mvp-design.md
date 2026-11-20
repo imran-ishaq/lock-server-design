@@ -62,7 +62,7 @@ Lock Server ingestion transaction
     │   ├── verify producer signature
     │   ├── compute content_digest
     │   └── compute receipt hash
-    └── persist record, receipt entry, and indexes (Lock MVP §9)
+    └── persist record, receipt entry, and indexes (Lock MVP §9, §9.1)
 
 Independent verifier
     └── jans-trace-core
@@ -239,7 +239,7 @@ The genesis sentinel is a protocol constant, not the SHA-256 hash of an empty by
 
 `jans-trace-core` computes a hash from inputs supplied by Lock. It does not allocate the next sequence or determine the chain head.
 
-The original design had Lock lock the chain-head row, assign the sequence, insert the record and its receipt entry, and update the head in one database transaction. Lock's storage has no multi-entry transaction, so Lock claims a receipt position as a `PENDING` entry, stores the record, and settles the entry `COMMITTED`, or `VOID` when the request fails (`Lock-Server-TRACE-MVP-Design.md` §9). Retrying the same record returns its original receipt and does not append a new one.
+The original design had Lock lock the chain-head row, assign the sequence, insert the record and its receipt entry, and update the head in one database transaction. Lock's storage has no general multi-entry transaction and Lock keeps no chain-head row: a node reads the highest receipt entry and inserts the next position under a unique key. By default Lock claims a receipt position as a `PENDING` entry, stores the record, and settles the entry `COMMITTED`, or `VOID` when the request fails (`Lock-Server-TRACE-MVP-Design.md` §9). With batch ingest on a SQL backend, Lock instead reserves a contiguous range and inserts the receipt entries, already `COMMITTED`, and the records of one request in one transaction (§9.1). Either way the core only computes the hashes. Retrying the same record returns its original receipt and does not append a new one.
 
 ## 8. Rust API
 
@@ -504,13 +504,13 @@ The assertion profile `tag:jans.io,2026:trace-v1` is a **distinct Jans/Lock prof
 - Cross-language CI.
 - Fuzzing gates and performance benchmarks.
 
-Status: Phase 1 and Phase 2 are implemented except the normative vectors and receipt-chain property tests; Lock's transaction integration is Lock's own (`Lock-Server-TRACE-MVP-Design.md` §9). Of Phase 3, the binding (UniFFI instead of JNI), Maven packaging (linux x86-64), and the start-up self-test are done; the conformance CLI, cross-language CI, and fuzzing gates are not.
+Status: Phase 1 and Phase 2 are implemented except the normative vectors and receipt-chain property tests; Lock's transaction integration is Lock's own (`Lock-Server-TRACE-MVP-Design.md` §9, §9.1). Of Phase 3, the binding (UniFFI instead of JNI), Maven packaging (linux x86-64), and the start-up self-test are done; the conformance CLI, cross-language CI, and fuzzing gates are not.
 
 All three phases are part of the TRACE MVP delivery. The order permits Cedarling record production and standalone verification to stabilize before Lock adopts the native binding.
 
 ## 17. MVP acceptance criteria
 
-The library is ready for MVP use when the list below holds. Status: criterion 2 (normative vectors through Rust and Java) and criterion 13 (fuzz targets) are not met yet; criterion 12 is Lock's, and Lock's storage writes the record and its receipt entry as separate steps (`Lock-Server-TRACE-MVP-Design.md` §9).
+The library is ready for MVP use when the list below holds. Status: criterion 2 (normative vectors through Rust and Java) and criterion 13 (fuzz targets) are not met yet. Criterion 12 is Lock's and holds only in part. With batch ingest on a SQL backend, Lock writes the records, their indexes (attributes of the record entry), and their receipt entries in one transaction; Lock keeps no separate chain-head row, and the derived flags of neighboring records are updated after the commit. On the default per-record path the record and its receipt entry are separate writes (`Lock-Server-TRACE-MVP-Design.md` §9, §9.1).
 
 The criteria:
 
