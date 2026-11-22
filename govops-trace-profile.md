@@ -19,6 +19,8 @@ Each change is marked:
 
 For the full semantics of every field, the implementing design document is authoritative; this document is the vendor-neutral schema-change checklist.
 
+The GovOps TRACE Collector API (`govops-trace-collector-api.md`) refers to this profile for everything about a record's content and cryptographic protection. It treats the profile as a unit identified by `trace.eat_profile` and advertises, per profile, the signature algorithms, canonicalization, and content-digest algorithm the Collector supports. §15 states what this profile defines for that purpose.
+
 ---
 
 ## 1. Envelope restructuring
@@ -28,12 +30,12 @@ For the full semantics of every field, the implementing design document is autho
 | Top-level field | Change | Notes |
 |---|---|---|
 | `producer` | **[ADD]** | Stable logical producer id (e.g. `pdp-fleet-1`), **not** `name/semver`. Must be byte-equal to `producer_chain.producer_id`. |
-| `record_id` | **[ADD]** | Producer-generated UUID/ULID. With `producer_id` + `evidence_domain_id` forms the storage primary key. (v0.2 has no record identity field.) |
-| `kid` | **[ADD]** | Selector for the registered verification key (resolved out-of-band from the Producer Key Registry, not from the body). |
+| `record_id` | **[ADD]** | Producer-generated identifier inside the signed body: a UUID in lowercase canonical text (RFC 9562, `8-4-4-4-12`) or a ULID in uppercase Crockford base32 (26 characters). No other form is valid, and identifiers are compared as exact strings. With `producer_id` and the collector-derived evidence domain it forms the record identity. (v0.2 has no record identity field.) |
+| `kid` | **[ADD]** | Selector for the registered verification key (resolved out-of-band from the Producer Key Registry, not from the body). It is inside the signed scope. |
 | `trace` | **[STRUCT]** | Object wrapping the TRACE claim (fields in §2–§4). The base v0.2 top-level claim fields move inside it. |
 | `producer_chain` | **[ADD]** | Per-producer hash chain (§5). |
 | `parent_record_ids` | **[ADD]** | Typed causal edges to other records (§6). |
-| `signature` | **[CONSTRAIN]** | As v0.2 (base64url Ed25519/ES256/ES384 over RFC 8785 JCS of all fields except `signature`), but the GovOps MVP fixes **Ed25519 only** (a deliberate subset of the v0.2 set). The signature covers the whole envelope, not just `trace`. |
+| `signature` | **[CONSTRAIN]** | As v0.2 (base64url Ed25519/ES256/ES384 over RFC 8785 JCS of all fields except `signature`), but the GovOps MVP fixes **Ed25519 only** (a deliberate subset of the v0.2 set). The signature covers the whole envelope, not just `trace`. The complete suite (algorithm, signature input, encoding, canonicalization, content digest, genesis sentinel) is in §15. |
 
 **[CONSTRAIN] `cnf` is not carried in the body.** v0.2 carries the signing key in `cnf.jwk`. GovOps resolves the key by `kid` from the administratively-provisioned Producer Key Registry and **omits `cnf`** — the in-record key is never trusted to establish its own authority. (This is a profile divergence from base v0.2.)
 
@@ -47,9 +49,9 @@ Inside `trace`, relative to the base v0.2 claim:
 |---|---|---|
 | `eat_profile` | **[CONSTRAIN]** | Fixed to `tag:govops.owasp.org,2026:trace-v1`. |
 | `event_kind` | **[ADD]** | **The schema discriminator.** Required; selects which `event` sub-schema applies (§7). This is the single largest addition — v0.2 has no event-kind concept. |
-| `signed_at` | **[CONSTRAIN]** | NumericDate; the base v0.2 `iat`, renamed and explicitly "producer time, not receipt time." |
-| `trace_execution_id` | **[ADD]** | Governed-execution correlation id. Required for the MVP catalog kinds. |
-| `execution_authority` | **[ADD]** | Scopes `trace_execution_id`; travels with it. Distinct from `subject.workload_id`. |
+| `signed_at` | **[CONSTRAIN]** | NumericDate; the base v0.2 `iat`, renamed and explicitly "producer time, not receipt time." A claim only: a collector uses its own clock, never `signed_at`, to decide whether a key was valid, and never to order receipts. |
+| `trace_execution_id` | **[ADD]** | Identifies one specific governed execution within the namespace named by `execution_authority`. Required for the MVP catalog kinds. |
+| `execution_authority` | **[ADD]** | Identifies the namespace in which an execution ID is allocated. Travels with `trace_execution_id`; the two together are the **execution correlation pair**, allocated by the component that initiates the governed execution before the first authorization evaluation and reused by every component that continues it. A record with only one of the two is incomplete. Distinct from `subject.workload_id`. |
 | `execution_epoch_id` / `previous_epoch_id` | **[ADD]** | Epoch rollover within one execution (same `trace_execution_id`). |
 | `parent_execution_id` | **[ADD]** | Links a child execution to its parent (delegation/fan-out). |
 | `operation_ids` | **[ADD]** | Business operation/transaction ids within the execution. |
@@ -99,8 +101,8 @@ Per-producer, append-only hash chain. No v0.2 equivalent.
 | `producer_id` | Byte-equal to top-level `producer`. |
 | `producer_instance_id` | The producer/PDP instance (e.g. a PDP's `pdp_id`). |
 | `producer_chain_id` | Stable per-chain id; a producer instance may own several concurrent chains. |
-| `sequence_number` | Monotonic within one chain. |
-| `prev_record_hash` | `content_digest` of the positional predecessor; genesis sentinel on an authenticated genesis. |
+| `sequence_number` | Monotonic within one chain; 1 on the genesis record. |
+| `prev_record_hash` | `content_digest` (§15) of the positional predecessor, or the genesis sentinel (§15) on the genesis record. The sentinel on any other position, or a non-sentinel at position 1, is a chain-link finding that the collector reports. It is not a schema error. |
 | `chain_link` | Present only on a genesis that continues a prior chain (`prev_producer_chain_id`/head/digest/final-sequence). |
 
 **[CONSTRAIN] `producer_version`** (software version/build/runtime) travels as a separate signed field, never folded into `producer_id`.
@@ -179,14 +181,14 @@ The one schema-adjacent artifact GovOps adds is that **capability mapping** (an 
 
 Not record fields, but schemas GovOps requires alongside the record:
 
-- **Producer key entry:** `(evidence_domain_id, producer_id, kid)` → `public_key_jwk`, `key_type`, `authorized_event_kinds`, `authorized_measurement_points`, `valid_from`/`valid_until`, `revoked_at`/`revocation_reason`, `key_class`.
+- **Producer key entry:** `(evidence_domain_id, producer_id, kid)` → `public_key_jwk`, `key_type`, the key's signature `algorithm`, `authorized_event_kinds`, `authorized_measurement_points`, `valid_from`/`valid_until`, `revoked_at`/`revocation_reason`, `key_class`. A key states its own algorithm, so a collector can reject a record whose algorithm is not among those it supports for the profile. Validity and revocation are evaluated at the collector's acceptance time, not at `signed_at`.
 - **Producer-Key Authorization Statement:** an administratively-signed artifact binding `statement_id`/`statement_version`, `administrative_issuer`, `evidence_domain_id`, `producer_id`, `public_key_thumbprint`, `kid`, `authorized_event_kinds`/`authorized_measurement_points`, `issued_at`, `valid_from`/`valid_until`, `revocation_status`, `supersedes`, `signature`. Carried in Evidence Packets so offline verifiers can confirm a key's authority.
 
 ---
 
-## 11. Receipt commitment — **[ADD]** (collector-side, separate profile)
+## 11. Receipt commitment — **[ADD]** (collector-side, separate profile, optional for the Collector API)
 
-The collector's receipt-ledger entry is its own profile (`tag:govops.owasp.org,2026:trace-receipt-v1`): `{ receipt_profile, evidence_domain_id, receipt_sequence, received_at (ms precision), producer_id, record_id, content_digest, prev_receipt_hash }`. Not part of the producer record schema.
+A collector that keeps a hash-chained receipt ledger may define its entry as its own profile (`tag:govops.owasp.org,2026:trace-receipt-v1`): `{ receipt_profile, evidence_domain_id, receipt_sequence, received_at (ms precision), producer_id, record_id, content_digest, prev_receipt_hash }`. It is not part of the producer record schema. The Collector API does not require a receipt chain: its acceptance receipt needs only `receipt_id` and `received_at` (with `receipt_sequence` as an optional extension), and the ledger, its commitment profile, and its checkpoints are internal to the collector.
 
 ---
 
@@ -194,13 +196,13 @@ The collector's receipt-ledger entry is its own profile (`tag:govops.owasp.org,2
 
 Implementers must keep these **out** of the signed record schema; the collector computes and stores them in the three-part Stored Record Envelope (`verification`/`ingestion`) or the append-only assessment store:
 
-- `content_digest`, `receipt_sequence`, `received_at`, `prev_receipt_hash`, and the ingestion flags (`coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, `late_flag`, `unattributed_flag`, `candidate_flag`).
+- `content_digest`, `receipt_id`, `receipt_sequence`, `received_at`, `prev_receipt_hash`, `chain_admission` (the genesis classification), and the ingestion flags (`coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, `late_flag`, `unattributed_flag`, `candidate_flag`). A collector may assess the chain flags synchronously or after durable acceptance, and the Collector API makes their presence in a receipt optional.
 - The admission results (`key_resolved`/`key_temporally_valid`/`key_not_revoked`/`key_authorized_for_producer`/`producer_authorized_for_claim`), `key_thumbprint`, `key_authorization_ref`, `verified_at`.
 - `trust_tier` and the per-dimension verification vector.
 - Settlement assessments/receipts, completeness/assurance/lineage results, delegation-validation, instance-binding, external-anchor assessments, and `capability_resolution`.
-- `evidence_domain_id` (collector-derived from the authenticated client; a producer-supplied value is ignored and flagged).
+- `evidence_domain_id` (collector-derived from the authenticated submitter identity; a producer-supplied value is ignored for every purpose and flagged, and it stays in the signed assertion unchanged).
 
-A producer that places any of these in its signed body has that field ignored and the attempt flagged.
+A producer that places any of these in its signed body has that field ignored and the attempt flagged. The member remains part of the signed assertion and is preserved unchanged.
 
 ---
 
@@ -354,6 +356,23 @@ Metrics 1–3 and 11 may be reported with an **attribution-quality cut** (e.g. c
 
 ---
 
+## 15. Cryptographic suite and record limits — **[CONSTRAIN]**
+
+The Collector API does not define any cryptographic algorithm. It requires the profile named in `trace.eat_profile` to define each item below, and it advertises them per profile. For `tag:govops.owasp.org,2026:trace-v1`:
+
+| Item | Definition |
+|---|---|
+| Signature algorithm and key | Ed25519 (RFC 8032). A registered key is a JWK of type `OKP`, curve `Ed25519` (RFC 8037). There is no algorithm agility in this profile. |
+| Signature input | The RFC 8785 (JCS) canonical form of the complete top-level record with only the top-level `signature` member omitted. Every other member, including unknown members and `kid`, is signed. |
+| Signature encoding | Unpadded base64url (RFC 4648 §5) of the 64-byte signature. Padding, the standard base64 alphabet, a wrong length, and a non-string value are invalid. |
+| Canonicalization | RFC 8785 (JCS). The input is strict JSON: UTF-8, no duplicate member name at any depth, no `NaN` or infinity, numbers within the I-JSON range (RFC 7493), and a top-level object. |
+| Content digest | `sha256:` followed by the lowercase hexadecimal SHA-256 of the JCS form of the **complete** record, including `signature`. There is no other textual form. It is computed by the collector and is never a record member. |
+| Genesis sentinel | `sha256:` followed by 64 zeros. It is the `prev_record_hash` of the record at `sequence_number` 1. |
+| Identifier forms | `record_id`: lowercase UUID or uppercase ULID (§1). |
+| Array limits | `tokens[]` 32; `token_claims[]` 32; `decisions[]` and `invocations[]` 128; `operation_ids[]` 64; `parent_record_ids[]` 64. A record that exceeds a limit is invalid and is never truncated. A record is expected to stay within 262,144 bytes. |
+
+**Versioning.** A change to the signature algorithm, signature input, signature encoding, canonicalization, content digest, genesis sentinel, or identifier forms is a new profile identifier. A profile identifier therefore fixes how a record is canonicalized and digested for as long as the identifier exists. A collector that stops accepting new records under an identifier can still answer a resubmission of an earlier record, because it can still digest it. A new profile, for example one that requires hardware-backed ECDSA signatures, needs no new version of the Collector API.
+
 ## Summary of required schema changes
 
 | # | Change | Class | MVP? |
@@ -370,14 +389,16 @@ Metrics 1–3 and 11 may be reported with an **attribution-quality cut** (e.g. c
 | 10 | Lifecycle/identity/approval/signal event kinds (21 more) | ADD | later |
 | 11 | Capability resolution (policy-store mapping; `capability_id` collector-derived, resolution MVP-required) | ADD / COLLECTOR-DERIVED | yes |
 | 12 | Producer Key Registry entry + Producer-Key Authorization Statement schemas | ADD (out-of-band) | yes |
-| 13 | Receipt-commitment profile | ADD (collector-side) | yes |
+| 13 | Receipt-commitment profile (collector-internal; not required by the Collector API) | ADD (collector-side) | yes |
 | 14 | Capability resolution (every MVP decision/invocation record) | COLLECTOR-DERIVED | **yes** |
 | 15 | Analytics enrichment: token (`claims_at_decision` vs `current_token_state`), `session_correlation`, `actor_context`, versioned org/resource/capability reference data, four region dimensions, attribution quality, per-invocation projection | COLLECTOR-DERIVED | yes (full depth phased) |
 | 16 | GovOps metrics with explicit per-family denominators (authorization / invocation / observed-effect) | COLLECTOR-DERIVED | yes |
+| 17 | Cryptographic suite, genesis sentinel, identifier forms, and array limits stated by the profile (§15) | CONSTRAIN | yes |
 
 ## References
 
 - The implementing design document — authoritative field semantics, event-kind schemas, collector-derived enrichment and assessment-store layout, GovOps analytics/metrics, and alignment with TRACE v0.2.
+- `govops-trace-collector-api.md` — the Collector API that submits these records. It names this profile in `trace_profiles` and relies on §15 for the cryptographic suite.
 - The base **TRACE v0.2 Trust Record** specification (EAT profile `tag:agentrust-io.com,2026:trace-v0.2`) — the schema this profile extends.
 
 ---
@@ -455,7 +476,7 @@ The same decision as a GovOps record: claims nested under `trace`, an `event_kin
     "prev_record_hash": "sha256:..."
   },
   "parent_record_ids": [
-    { "producer_id": "auth-server", "record_id": "R-token-issued-001", "relationship_type": "issued_token" }
+    { "producer_id": "auth-server", "record_id": "0191f3a0-7b40-7a11-8b01-0a1b2c3d4e01", "relationship_type": "issued_token" }
   ],
   "signature": "base64url(Ed25519 over RFC 8785 JCS of all fields except signature)"
 }
@@ -521,9 +542,9 @@ Everything the collector computes lives in the Stored Record Envelope's `verific
   "session_correlation": {
     "sid": "sess-7f3a...",
     "session_issuer": "https://accounts.example.org",
-    "authentication_event_ref": "R-authn-event-88",
+    "authentication_event_ref": "0191f3a0-7b41-7a12-8b02-0a1b2c3d4e02",
     "authentication_strength": "phishing_resistant_mfa",
-    "fido_ceremony_ref": "R-fido-ceremony-88",
+    "fido_ceremony_ref": "0191f3a0-7b42-7a13-8b03-0a1b2c3d4e03",
     "authenticated_human_ref": "sha256:user-...",
     "resolved_via": "jti->sid->session->authn_event->fido_ceremony",
     "resolved_at": "2026-06-11T00:41:05.600Z"
@@ -578,7 +599,7 @@ The enforcement point — a **different producer** with its own key and chain, e
 ```json
 {
   "producer": "payments-gateway",
-  "record_id": "R-capability-invoked-003",
+  "record_id": "0191f3a0-7b43-7a14-8b04-0a1b2c3d4e04",
   "kid": "gw-key-2026-01",
   "trace": {
     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
