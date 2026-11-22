@@ -53,15 +53,16 @@ This document does not specify, and a conforming Collector is free to choose:
 - correlation, graph, analytics, or retrieval APIs;
 - settlement, completeness, trust-tier, capability-resolution, or any other derived assessment;
 - the mechanism by which producer keys and evidence domains are provisioned (configuration file, admin API, or other);
-- the TRACE record schema itself, which is defined by the TRACE record profile and is referenced, not duplicated, here.
+- the TRACE record schema, and the cryptographic suite that protects a record (signature algorithms, signature input construction, canonicalization, and content-digest computation). Both belong to the TRACE record profile and are referenced, not duplicated, here (§5.3).
 
-If this document and a TRACE record profile disagree about the content of a record, the profile governs. If they disagree about API behavior, this document governs.
+If this document and a TRACE record profile disagree about the content of a record or its cryptographic protection, the profile governs. If they disagree about API behavior, this document governs.
 
 ### 1.3 Design constraints
 
 1. The evidence format is transport-independent. REST is the canonical Collector submission interface, but a producer MAY carry a signed record through an intermediary (OTLP, Kafka, or another broker). The signed bytes, not the transport, are the evidence (§12).
 2. Receiving a record, verifying it, accepting it, and assessing it are different things, and this document keeps them separate (§7).
 3. Nothing a client or intermediary sends outside the signed assertion can select the evidence domain, raise trust, or substitute for a producer signature.
+4. The API is independent of the cryptographic suite. The record profile defines the suite, the Collector advertises it per profile, and a new profile (for example one using hardware-backed ECDSA signatures) needs no new API version (§5.3, §11).
 
 ---
 
@@ -74,6 +75,7 @@ JSON is as defined by RFC 8259. "Strict JSON" is defined in §5.2.
 | Term | Meaning |
 |---|---|
 | **Record** | A producer-signed TRACE assertion: the complete top-level JSON object, including `signature`. |
+| **TRACE record profile** ("profile") | The specification, identified by `trace.eat_profile`, that defines a record's members, event kinds, and cryptographic protection (§5.3). |
 | **Producer** | The component that creates and signs a record. Identified by the signed `producer` member. |
 | **Submitter** | The authenticated OAuth client that sends the HTTP request. It is often, but not always, the producer. |
 | **Forwarder** | A submitter that relays records signed by other producers (§12). |
@@ -81,7 +83,7 @@ JSON is as defined by RFC 8259. "Strict JSON" is defined in §5.2.
 | **Evidence domain** | The Collector's isolation partition for authorization, storage, and identity. Derived by the Collector from the authenticated submitter, never from the record (§4.4). |
 | **Producer key registry** | The Collector's administratively provisioned mapping from `(evidence domain, producer_id, kid)` to a public key and the event kinds that key may sign. |
 | **Record identity** | `(evidence domain, producer_id, record_id)`. |
-| **`content_digest`** | `"sha256:"` plus lowercase hexadecimal SHA-256 of the RFC 8785 (JCS) canonical form of the complete record, including `signature` (§5.5). |
+| **`content_digest`** | A Collector-computed fingerprint of the complete record, including `signature`, constructed as the record's profile defines and written `<algorithm>:<value>` (§5.5). |
 | **Acceptance receipt** | The Collector's response stating that it verified and durably accepted a record (§6.3, §7). |
 | **Execution correlation pair** | `(execution_authority, trace_execution_id)`: the namespace in which an execution ID was allocated, and the ID of one execution within it. A profile may require both on every record. |
 | **Terminal rejection** | A rejection that retrying the same bytes cannot cure. |
@@ -152,7 +154,7 @@ Two independent checks apply to every record. Neither substitutes for the other.
 | | Submission authorization | Producer verification |
 |---|---|---|
 | Question | May this authenticated client send records to this Collector, for this producer? | Did the registered producer sign exactly these bytes, and may that key sign this event kind? |
-| Evidence | OAuth token, scope, submitter-to-evidence-domain binding, submitter-to-producer permission | Producer key registry entry, `kid`, Ed25519 signature |
+| Evidence | OAuth token, scope, submitter-to-evidence-domain binding, submitter-to-producer permission | Producer key registry entry, `kid`, signature verified as the record's profile defines |
 | Failure | `401`, `403` | `400` with a key or signature code |
 | Granted by | The Collector's access-control configuration | The producer key registry, provisioned administratively |
 
@@ -164,7 +166,7 @@ Rules:
 4. **Registry authority.** The index `(evidence domain, producer_id, kid)` locates a candidate key. Authority to sign comes from the administrative registration of that key: it exists, is within its validity window, is not revoked, is registered for this `producer_id`, and lists the record's `trace.event_kind` as permitted.
 5. **A valid OAuth token never makes an invalid signature acceptable**, and a valid signature never overrides a missing submission permission.
 
-The minimum content of a producer key registration is informative:
+The minimum content of a producer key registration is informative. The key representation and algorithm are defined by the profile. The example is for a profile that uses Ed25519:
 
 ```json
 {
@@ -195,7 +197,7 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 9 | Validate record structure: required members, supported profile, `record_id` form, `producer` equals `producer_chain.producer_id`, event-kind schema, required correlation context | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE`, `PRODUCER_IDENTITY_MISMATCH`, `MISSING_EXECUTION_CONTEXT` |
 | 10 | Compute `content_digest`; look up the record identity; if an accepted record has the same digest, return its original receipt (replay) | none: replay |
 | 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation; check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
-| 12 | Check signature encoding and verify the Ed25519 signature | `400 SIGNATURE_MALFORMED`, `SIGNATURE_INVALID` |
+| 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | `400 SIGNATURE_MALFORMED`, `UNSUPPORTED_ALGORITHM`, `SIGNATURE_INVALID` |
 | 13 | If the identity exists with a different digest | `409 RECORD_ID_CONFLICT` |
 | 14 | Evaluate producer-chain position and set integrity flags | none: flags |
 | 15 | Atomically and durably commit the record and its receipt | `503 COLLECTOR_UNAVAILABLE`, `500 INTERNAL_ERROR` |
@@ -218,42 +220,66 @@ The request body, and every record, MUST be strict JSON. A Collector MUST reject
 
 - invalid UTF-8, or invalid Unicode scalar values in strings;
 - a duplicate member name at any depth (a parser that silently keeps the first or last duplicate is not acceptable for signed input);
-- `NaN`, `Infinity`, `-Infinity`, or numbers the RFC 8785 number model cannot represent;
+- `NaN`, `Infinity`, `-Infinity`, or values the profile's canonicalization cannot represent unambiguously (the profile MAY add stricter rules);
 - trailing non-whitespace content after the JSON value;
 - a record that is not a JSON object;
 - nesting deeper than `max_nesting_depth`.
 
-### 5.3 Record structure
+### 5.3 Record structure and the profile contract
 
-The record's members, event kinds, and schemas are defined by the TRACE record profile named in `trace.eat_profile`. This document does not restate them. The Collector reads these top-level members for routing, identity, and verification:
+The TRACE record profile named in the record's `trace.eat_profile` defines the record. This document does not restate it and does not define any cryptographic algorithm.
+
+**Profile-defined.** The profile, not this API, defines:
+
+1. the signature algorithms and the public-key representation;
+2. the signature input construction;
+3. the signature encoding;
+4. canonicalization of the record;
+5. the content-digest algorithm, its construction, and its textual form;
+6. the predecessor sentinel for the first record of a chain;
+7. the event kinds and their schemas; and
+8. any strictness beyond §5.2, such as a number model.
+
+**Conformance rule.** Signature algorithms, signature input construction, canonicalization, and content-digest computation MUST conform to the TRACE record profile identified by the record's `trace.eat_profile` and advertised by the Collector in its metadata (§11). A Collector MUST NOT negotiate, select, or accept an algorithm independently of the applicable profile, and MUST NOT apply the cryptographic rules of one profile to a record of another. A Collector MUST NOT accept an algorithm named in the request, in a header, or in transport metadata.
+
+**Why this matters.** The API depends on a profile only through the contract in this section. A future profile, for example one that requires hardware-backed ECDSA signatures, is supported by listing it in the Collector's metadata. It does not require a new API version.
+
+**What a profile must provide to be used with this API.**
+
+- The members in the table below, under these names.
+- A canonicalization that is a deterministic function of the record, such that two records have the same canonical form if and only if they are semantically identical.
+- A content digest that is a deterministic, collision-resistant function of the complete record including its signature, written `<algorithm>:<value>` with exactly one textual form for a given digest, so that digests can be compared as strings.
+- A signed scope that includes `producer`, `kid`, `record_id`, `trace`, and `producer_chain`, and every other member except the signature itself.
+- A key registration model in which a key states its algorithm.
+
+**Members the Collector reads** for routing, identity, and verification:
 
 | Member | Use by the Collector |
 |---|---|
 | `producer` | Stable logical producer identifier. MUST equal `producer_chain.producer_id` byte for byte. |
 | `kid` | Selects the registered key. Inside the signed scope. |
 | `record_id` | Producer-generated identity within the producer's namespace. |
-| `trace.eat_profile` | MUST be in the Collector's `trace_profiles_supported`. |
+| `trace.eat_profile` | MUST be one of the profiles in the Collector's `trace_profiles` metadata. |
 | `trace.event_kind` | MUST be permitted for the key. |
 | `trace.signed_at` | Producer time (NumericDate). A claim, never an ordering authority. |
 | `producer_chain.*` | Chain position and predecessor hash (§7.4). |
-| `signature` | Unpadded base64url Ed25519 signature. |
+| `signature` | The signature value, encoded as the profile specifies. |
 
 Unknown members MUST be preserved and are covered by the signature. A Collector MUST NOT remove, rename, reorder for storage semantics, or add members to the signed assertion.
 
+*Example (informative).* Profile `tag:govops.owasp.org,2026:trace-v1` defines Ed25519 (RFC 8032) signatures; a signature input that is the RFC 8785 (JCS) canonical form of the record without its top-level `signature`; an unpadded base64url signature encoding (RFC 4648 §5); a content digest that is SHA-256 of the JCS form of the complete record, written `sha256:` plus lowercase hexadecimal; and the predecessor sentinel `sha256:` plus 64 zeros. The vectors in Appendix C belong to that profile.
+
 ### 5.4 Signature
 
-- Algorithm: Ed25519 (RFC 8032). Algorithm agility is not provided by `v1`; the only value in `signature_algorithms_supported` defined by this version is `Ed25519`.
-- Signature input: the RFC 8785 canonical form of the complete top-level record with only the top-level `signature` member omitted. Every other member, including unknown members, is signed.
-- Signature encoding: unpadded base64url (RFC 4648 §5) of the 64-byte signature. A Collector MUST reject padding, the standard base64 alphabet, a wrong decoded length, and a non-string value with `SIGNATURE_MALFORMED`.
-- The Collector MUST verify with the key selected by the signed `kid`. It MUST NOT guess a key from a timestamp.
+- Verification MUST use the algorithm, signature input construction, and signature encoding that the record's profile defines (§5.3). A Collector MUST reject a malformed signature encoding with `SIGNATURE_MALFORMED`.
+- The algorithm needed to verify a record MUST be one the Collector lists for that profile in `trace_profiles` (§11.2) and MUST match the algorithm of the registered key. Otherwise the Collector MUST reject the record with `UNSUPPORTED_ALGORITHM`.
+- The Collector MUST verify with the key selected by the signed `kid`. It MUST NOT guess a key from a timestamp, and MUST NOT take a key or an algorithm from the request.
 
 ### 5.5 Content digest
 
-```text
-content_digest = "sha256:" + lowercase_hex( SHA-256( JCS( complete record including signature ) ) )
-```
+`content_digest` fingerprints the entire signed record, including its signature. It is computed as the record's profile defines, and is written `<algorithm>:<value>` (for example `sha256:` followed by lowercase hexadecimal). Two records have the same `content_digest` only if they have the same canonical form.
 
-`content_digest` fingerprints the entire signed record. It is Collector-computed and is never a signature-verification result, a record identifier, or a producer-supplied value. A producer-supplied `content_digest` member, if present, has no effect.
+`content_digest` is Collector-computed. It is never a signature-verification result, a record identifier, or a producer-supplied value. A producer-supplied `content_digest` member, if present, has no effect. Digests are compared as exact strings.
 
 ### 5.6 Record identity
 
@@ -263,8 +289,8 @@ content_digest = "sha256:" + lowercase_hex( SHA-256( JCS( complete record includ
 
 ### 5.7 Signature and byte preservation
 
-- A Collector MUST store the assertion so that its JCS form, and therefore its signature and `content_digest`, can be reproduced exactly at any later time. A Collector MUST NOT insert resolved claims, status, trust, corrections, or receipt data into the assertion.
-- A Collector SHOULD also retain the exact received bytes, because some later anchoring formats commit to the as-transmitted serialization, which JCS cannot reconstruct.
+- A Collector MUST store the assertion so that its canonical form (as the profile defines it), and therefore its signature input and `content_digest`, can be reproduced exactly at any later time. A Collector MUST NOT insert resolved claims, status, trust, corrections, or receipt data into the assertion.
+- A Collector SHOULD also retain the exact received bytes, because some later anchoring formats commit to the as-transmitted serialization, which canonicalization cannot reconstruct.
 - Idempotency and conflict decisions use `content_digest`, so a semantically identical resubmission with different whitespace, member order, or number spelling is the same record.
 
 ### 5.8 Limits
@@ -353,7 +379,7 @@ A Collector MAY add members. A client MUST ignore members it does not recognize.
 
 | Stage | What it establishes | When | Where reported |
 |---|---|---|---|
-| **Cryptographic verification** | The producer key was registered, valid, and authorized for the event kind, and the Ed25519 signature is valid over the JCS bytes. | Before acceptance (steps 11 and 12). | A failure is an error response. Success is implied by a receipt. |
+| **Cryptographic verification** | The producer key was registered, valid, and authorized for the event kind, and the signature is valid as the record's profile defines. | Before acceptance (steps 11 and 12). | A failure is an error response. Success is implied by a receipt. |
 | **Acceptance** | The Collector durably holds the assertion and a receipt for it, bound to the evidence domain, and will return the same receipt for any identical resubmission. | At the `201` or `200` (or an accepted bulk element). | The acceptance receipt. |
 | **Evidence assessment** | Derived findings such as settlement, completeness, trust tier, capability resolution, lineage coverage. | Later, asynchronously, any number of times. | Outside this API. |
 
@@ -394,7 +420,7 @@ Producers sequence their records in chains (`producer_chain`). Records may arriv
 | `equivocation_flag` | A different record, with a different `record_id` and a valid signature, is already held at the same `(producer_id, producer_instance_id, producer_chain_id, sequence_number)`. | No. Both records are retained and flagged. The Collector MUST NOT silently select one. |
 | `late_flag` | The Collector's receipt time is later than `signed_at` by more than a configured lateness policy. | No. Lateness alone is never a reason to reject. |
 
-The genesis record uses `sequence_number: 1` and the predecessor sentinel `sha256:` followed by 64 zeros. A Collector accepts a first record of a chain from any registered key (`first_observed_genesis`), and MAY additionally support chains whose genesis was registered in advance (`pre_registered_genesis`). The modes it supports are published as `producer_chain_registration_modes_supported`. Supporting a mode determines how the Collector assesses lineage later; it does not change what this API returns.
+The genesis record uses `sequence_number: 1` and the predecessor sentinel defined by the record's profile (for the GovOps v1 profile, `sha256:` followed by 64 zeros). A Collector accepts a first record of a chain from any registered key (`first_observed_genesis`), and MAY additionally support chains whose genesis was registered in advance (`pre_registered_genesis`). The modes it supports are published as `producer_chain_registration_modes_supported`. Supporting a mode determines how the Collector assesses lineage later; it does not change what this API returns.
 
 A same-`record_id` resubmission with different content is a **conflict** (§9), not an equivocation.
 
@@ -545,10 +571,11 @@ An error body MUST NOT contain a bearer token, signed record content, a signatur
 | `BATCH_MIXED_PRODUCERS` | 400 | no | Mixed producers and mixing is not supported | Split by producer |
 | `MALFORMED_JSON` | 400 | no | Not strict JSON, not an object/array as required, duplicate member, or too deep | Terminal for that record |
 | `SCHEMA_INVALID` | 400 | no | Record violates the profile schema, event-kind schema, array limits, or the `record_id` form | Terminal for that record |
-| `UNSUPPORTED_PROFILE` | 400 | no | `trace.eat_profile` not in `trace_profiles_supported` | Terminal for that record |
+| `UNSUPPORTED_PROFILE` | 400 | no | `trace.eat_profile` is not the `profile` of any entry in `trace_profiles` | Terminal for that record |
 | `MISSING_EXECUTION_CONTEXT` | 400 | no | Correlation pair required and absent or incomplete | Terminal for that record |
 | `PRODUCER_IDENTITY_MISMATCH` | 400 | no | `producer` differs from `producer_chain.producer_id` | Terminal for that record |
-| `SIGNATURE_MALFORMED` | 400 | no | Signature is not unpadded base64url of 64 bytes | Terminal for that record |
+| `SIGNATURE_MALFORMED` | 400 | no | The signature encoding is invalid under the record's profile | Terminal for that record |
+| `UNSUPPORTED_ALGORITHM` | 400 | no | The algorithm needed to verify the record is not supported for its profile, or does not match the registered key's algorithm | Terminal for that record |
 | `KEY_UNKNOWN` | 400 | no | No key registered for `(domain, producer_id, kid)` | Operator registers key |
 | `KEY_NOT_VALID` | 400 | no | Key outside its validity window or revoked | Operator action |
 | `EVENT_KIND_NOT_AUTHORIZED` | 400 | no | Key may not sign this `event_kind` | Operator action |
@@ -570,7 +597,7 @@ Additional rules:
 ### 10.3 Retry behavior
 
 - A client MUST NOT retry a response whose `retryable` is `false` unchanged. It MAY retry after an operator has acted (for example, registered a key).
-- A client MUST retry `retryable: true` outcomes, timeouts, and connection failures with the **same bytes** (or a JCS-equivalent serialization), using exponential backoff with jitter. It MUST honor `Retry-After` (RFC 9110 §10.2.3) when present. RECOMMENDED: initial delay 1 s, factor 2, cap 5 min, full jitter.
+- A client MUST retry `retryable: true` outcomes, timeouts, and connection failures with the **same bytes** (or a serialization with the same canonical form under the record's profile), using exponential backoff with jitter. It MUST honor `Retry-After` (RFC 9110 §10.2.3) when present. RECOMMENDED: initial delay 1 s, factor 2, cap 5 min, full jitter.
 - A client that depends on evidence delivery SHOULD keep unacknowledged records in durable local storage until it receives a receipt or a terminal rejection. Dropping a record after a bounded number of retries is a client policy decision and is evidence loss.
 - A client MUST NOT change a record's content and resubmit it under the same `record_id`. A corrected record is a new record with a new `record_id` and a new chain position.
 
@@ -599,10 +626,7 @@ Host: collector.example.org
 | `api_versions_supported` | array of string | REQUIRED | Supported API versions, such as `["v1"]`. |
 | `trace_ingestion_endpoint` | string (URL) | REQUIRED | Single-record submission URL. |
 | `trace_bulk_ingestion_endpoint` | string (URL) | CONDITIONAL | Bulk submission URL. Present if and only if bulk is supported. |
-| `trace_profiles_supported` | array of string | REQUIRED | Accepted `trace.eat_profile` values. |
-| `event_kinds_supported` | array of string | RECOMMENDED | Event kinds the Collector accepts. |
-| `signature_algorithms_supported` | array of string | REQUIRED | For `v1`, `["Ed25519"]`. |
-| `canonicalization_methods_supported` | array of string | RECOMMENDED | For `v1`, `["RFC8785"]`. |
+| `trace_profiles` | array of object | REQUIRED | One entry for each supported TRACE record profile, with that profile's cryptographic capabilities. See §11.2.1. |
 | `authorization_servers` | array of string (issuer URLs) | REQUIRED | OAuth 2.0 authorization servers whose tokens the Collector accepts. A client obtains each server's metadata by RFC 8414 or OpenID Connect Discovery at its issuer identifier. This member has the meaning defined for OAuth protected resource metadata in RFC 9728. |
 | `ingestion_scope` | string | REQUIRED | The scope required by both ingestion endpoints. |
 | `scopes_supported` | array of string | OPTIONAL | Other scopes the Collector defines. |
@@ -616,9 +640,31 @@ Host: collector.example.org
 | `acceptance_durability` | string | OPTIONAL | `local_durable` or `replicated_durable` (§7.2). A Collector that omits it makes no replication claim. |
 | `content_encodings_supported` | array of string | OPTIONAL | For example `["gzip"]`. Absent means none. |
 
+#### 11.2.1 Profile entries
+
+Each element of `trace_profiles` describes one profile and the cryptographic capabilities the Collector provides for it. A client chooses a profile from this list, and signs and digests its records as that profile defines.
+
+| Member | Type | Required | Meaning |
+|---|---|---|---|
+| `profile` | string | REQUIRED | The `trace.eat_profile` value. |
+| `signature_algorithms_supported` | array of string | REQUIRED | Signature algorithms the Collector verifies for records of this profile. Identifiers are those the profile defines. |
+| `canonicalization` | string | REQUIRED | The profile's canonicalization method, as the profile identifies it. |
+| `content_digest_algorithm` | string | REQUIRED | The profile's content-digest algorithm, as the profile identifies it. This is the `<algorithm>` prefix of `content_digest` values. |
+| `event_kinds_supported` | array of string | RECOMMENDED | Event kinds the Collector accepts under this profile. |
+
+Rules:
+
+- The identifiers in an entry are defined by the profile. This API treats them as opaque strings and does not define a registry of them.
+- A Collector MUST list only values it implements and enforces. It MUST verify a record using only the values in the entry for the record's `trace.eat_profile`.
+- A Collector MUST NOT negotiate an algorithm with a client. A client that cannot produce records using a listed profile and algorithm cannot submit to that Collector.
+- Different profiles MAY list different suites. A record is never verified with another profile's entry.
+- Adding a profile, or an algorithm to a profile's entry, does not change `api_versions_supported`.
+
 The limits MUST be values that every authorized submitter can rely on. A Collector MAY grant a particular submitter higher limits, but MUST NOT enforce lower ones than it publishes.
 
 ### 11.3 Example
+
+The values inside each `trace_profiles` entry come from that profile's definition.
 
 ```json
 {
@@ -626,10 +672,15 @@ The limits MUST be values that every authorized submitter can rely on. A Collect
   "api_versions_supported": ["v1"],
   "trace_ingestion_endpoint": "https://collector.example.org/api/v1/audit/trace",
   "trace_bulk_ingestion_endpoint": "https://collector.example.org/api/v1/audit/trace/bulk",
-  "trace_profiles_supported": ["tag:govops.owasp.org,2026:trace-v1"],
-  "event_kinds_supported": ["AUTHORIZATION_DECISION", "CAPABILITY_INVOKED", "RUNTIME_EFFECT"],
-  "signature_algorithms_supported": ["Ed25519"],
-  "canonicalization_methods_supported": ["RFC8785"],
+  "trace_profiles": [
+    {
+      "profile": "tag:govops.owasp.org,2026:trace-v1",
+      "signature_algorithms_supported": ["Ed25519"],
+      "canonicalization": "RFC8785",
+      "content_digest_algorithm": "sha256",
+      "event_kinds_supported": ["AUTHORIZATION_DECISION", "CAPABILITY_INVOKED", "RUNTIME_EFFECT"]
+    }
+  ],
   "authorization_servers": ["https://auth.example.org"],
   "ingestion_scope": "trace.write",
   "scopes_supported": ["trace.write"],
@@ -642,6 +693,17 @@ The limits MUST be values that every authorized submitter can rely on. A Collect
   "producer_chain_registration_modes_supported": ["first_observed_genesis", "pre_registered_genesis"],
   "acceptance_durability": "replicated_durable",
   "content_encodings_supported": ["gzip"]
+}
+```
+
+A Collector that adds a profile with a different suite adds another entry. For illustration only, a hypothetical hardware-backed ECDSA profile would appear as:
+
+```json
+{
+  "profile": "tag:example.com,2026:trace-ecdsa-v1",
+  "signature_algorithms_supported": ["ES256"],
+  "canonicalization": "RFC8785",
+  "content_digest_algorithm": "sha256"
 }
 ```
 
@@ -668,7 +730,7 @@ A forwarder is conforming only if it satisfies all of the following.
 
 **Preservation of signed assertions**
 
-- **FW-3** A forwarder MUST deliver each record so that the JCS form of the delivered record is identical to the JCS form of the record the producer signed. It MUST NOT add, remove, rename, truncate, normalize, or re-encode any signed member, MUST NOT re-sign, and MUST NOT wrap the record in a way the Collector would store as the assertion.
+- **FW-3** A forwarder MUST deliver each record so that the canonical form (as the record's profile defines it) of the delivered record is identical to that of the record the producer signed. It MUST NOT add, remove, rename, truncate, normalize, or re-encode any signed member, MUST NOT re-sign, and MUST NOT wrap the record in a way the Collector would store as the assertion.
 - **FW-4** A forwarder SHOULD forward the original bytes unchanged. If it parses and re-serializes, it MUST use a strict JSON implementation (rejecting rather than collapsing duplicate member names), MUST preserve string content and number values exactly, and MUST NOT pass records through a lossy intermediate data model (for example, converting integers to floating point, or splitting a record into typed attributes and re-assembling it). The RECOMMENDED carriage is as opaque text or bytes (Appendix D).
 - **FW-5** A forwarder MUST NOT infer, set, or replace any evidence field (producer identity, `kid`, correlation values, evidence domain, trust claims) from unsigned transport metadata such as OTLP attributes, resource attributes, Kafka headers, topic names, or HTTP headers. Such metadata is a routing and correlation hint only.
 
@@ -721,7 +783,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 - Submitter-to-producer permission should follow least privilege. A forwarder holding permission for many producers is a high-value credential; use sender-constrained tokens, narrow `ingestion_scope`, and separate credentials per evidence domain.
 
 **Signature verification.**
-- Use constant-time, reviewed Ed25519 implementations. Reject non-canonical signature encodings and duplicate JSON members, so one signed value cannot have two interpretations.
+- Use constant-time, reviewed implementations of the algorithms the profile requires. Reject non-canonical signature encodings and duplicate JSON members, so one signed value cannot have two interpretations.
 - Verify against the key selected by the signed `kid`; never guess from time, and never accept a key from the request.
 - Strict JSON (§5.2) is part of verification. A parser that keeps the last duplicate member lets an attacker present different content to the Collector and to an auditor.
 - A valid signature is necessary but not sufficient. It does not establish truth, completeness, independent observation, or successful enforcement. Collectors and consumers MUST NOT present accepted evidence as more than the record kind establishes.
@@ -729,7 +791,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 **Resource exhaustion.**
 - Enforce byte, count, depth, and rate limits before cryptographic work (§4.6, §5.8). Enforce decoded-size limits during decompression.
 - Bound per-request work: a batch with many invalid signatures costs one verification each, so apply rate limits per client and consider per-client limits on failed records.
-- Ed25519 verification is cheap but not free. Reject malformed encodings and unauthorized submitters before verifying.
+- Signature verification is not free, and its cost depends on the profile's algorithm. Reject malformed encodings and unauthorized submitters before verifying.
 - Return `429` with `Retry-After` rather than queuing without bound. Never acknowledge from an unbounded queue (§7.2).
 
 **Tenant isolation.**
@@ -751,7 +813,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 
 **Error and log hygiene.** Do not echo record content or tokens in errors or logs. Treat `detail` strings that quote attacker-controlled values as untrusted when rendering.
 
-**Downgrade.** `v1` has a single signature algorithm and canonicalization. A future version adds algorithms under a new profile identifier and an explicit verifier policy, not through a record-selected algorithm.
+**Downgrade.** The record's profile fixes the cryptographic suite, and the Collector MUST NOT negotiate an algorithm independently of it (§5.3). A new algorithm arrives only as a new profile identifier (or a profile revision) listed in the Collector's metadata, with an explicit verifier policy. An attacker cannot select a weaker algorithm by naming it in a request, a header, or a record member, because none of those is consulted.
 
 ---
 
@@ -797,7 +859,8 @@ Unless a test says otherwise, it starts from an empty record store and this conf
 | Client `c-nodom` | ingestion scope; no evidence-domain binding |
 | Client `c-d2` | bound to `D2`; ingestion scope; may submit for `pdp-fleet-1`; no keys registered in `D2` |
 | Registry `D1` | `pdp-fleet-1` / `key-2026-01` authorizing `AUTHORIZATION_DECISION`; `payments-gateway-pep` / `pep-key-2026-01` authorizing `CAPABILITY_INVOKED`. Public keys are in Appendix C.1. |
-| Metadata | `execution_correlation_required: true`, `bulk_mixed_producers_supported: false`, `first_observed_genesis` supported, `trace_profiles_supported` contains `tag:govops.owasp.org,2026:trace-v1` |
+| Profile | The Appendix C vectors belong to profile `tag:govops.owasp.org,2026:trace-v1` (Ed25519, RFC 8785 canonicalization, SHA-256). A Collector listing any other profile MUST also pass the tests below with vectors from that profile (positive, tampered, malformed signature, unsupported algorithm, and the chain cases). |
+| Metadata | `execution_correlation_required: true`, `bulk_mixed_producers_supported: false`, `first_observed_genesis` supported, `trace_profiles` contains `tag:govops.owasp.org,2026:trace-v1` |
 | Limits | The Collector's published limits. Tests that exceed a limit read it from metadata. |
 
 Vector identifiers (`V-nn`) refer to Appendix C.
@@ -839,7 +902,7 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-31 | §4.1 | Attempt a cleartext HTTP submission with a token. | Connection refused, or no request processing; no redirect carrying the token. |
 | C-32 | §7.1 | Submit a record that fails verification on a Collector that quarantines **(hook)**. | Response is a rejection with no receipt. The record is absent from retrieval and correlation. |
 | C-33 | §7.2 **(hook)** | Kill the Collector between accepting a request and the durable commit. | No receipt was returned. After restart, resubmission is a first acceptance. |
-| C-34 | §12.2 CO-3 | `c-fwd` submits V-01 and V-03. Retrieve the stored assertions. | JCS of each stored assertion equals JCS of the submitted record. The forwarder is not recorded as the producer. |
+| C-34 | §12.2 CO-3 | `c-fwd` submits V-01 and V-03. Retrieve the stored assertions. | The canonical form of each stored assertion equals that of the submitted record. The forwarder is not recorded as the producer. |
 
 ### 15.4 Bulk tests
 
@@ -872,12 +935,14 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | D-06 | §4.2, §11.2 | Use a valid token from a listed authorization server, then one from an unlisted issuer. | Accepted; `401 UNAUTHENTICATED`. |
 | D-07 | §11.2 | Inspect the document. | No tenant, client, producer, or key information. |
 | D-08 | §11.2 | Inspect `producer_chain_registration_modes_supported`. | Contains `first_observed_genesis` or `pre_registered_genesis`, and only modes the Collector supports. |
+| D-09 | §5.3, §11.2.1 | Inspect each `trace_profiles` entry. | Each has `profile`, `signature_algorithms_supported`, `canonicalization`, and `content_digest_algorithm`. For each, the `<algorithm>` prefix of receipt `content_digest` values for that profile equals `content_digest_algorithm`. |
+| D-10 | §5.3, §5.4 | For a profile listing more than one algorithm, submit a record whose key algorithm is not in that profile's list. For two profiles with different suites, submit one record for each. | `400 UNSUPPORTED_ALGORITHM` for the first. Each record in the second case is verified only with its own profile's suite, and the Collector does not accept an algorithm named in a request header. |
 
 ### 15.6 Producer tests
 
 | ID | Requirements | Procedure | Expected |
 |---|---|---|---|
-| P-01 | §5.4 | Verify a producer's output for V-01's content class with the public key. | Ed25519 signature verifies over JCS minus `signature`; `kid` is inside the signed scope; signature is unpadded base64url. |
+| P-01 | §5.3, §5.4 | Verify a producer's output with the public key, using the producer's profile. | The signature verifies as that profile defines; `kid` is inside the signed scope; the signature encoding is the profile's. |
 | P-02 | §5.6 | Generate 10,000 records. | Every `record_id` is a lowercase UUID or an uppercase ULID, and is unique for the producer. |
 | P-03 | §5.5 | Compare the producer's own `content_digest` with the receipt's. | Equal, or the producer reports a mismatch as an error. |
 | P-04 | §10.3 | Stub returns `503` twice, then `201`. | The producer resubmits identical bytes, with increasing delays, and records success only after the `201`. |
@@ -894,7 +959,7 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 
 | ID | Requirements | Procedure | Expected |
 |---|---|---|---|
-| F-01 | FW-3, FW-4 | Pass V-01, V-03, V-04, V-06 through the forwarder. | The JCS form, and therefore `content_digest`, of each delivered record equals the source's. V-04 (non-ASCII values) is not altered by re-encoding. |
+| F-01 | FW-3, FW-4 | Pass V-01, V-03, V-04, V-06 through the forwarder. | The canonical form, and therefore `content_digest`, of each delivered record equals the source's. V-04 (non-ASCII values) is not altered by re-encoding. |
 | F-02 | FW-3, FW-7 | Pass V-10 through the forwarder. | It is delivered unchanged (or surfaced), never repaired. The Collector returns `SIGNATURE_INVALID`. |
 | F-03 | FW-2 | Feed records for `D1` and `D2` through a forwarder with a credential per domain. | Each request uses the matching credential. No request contains records from both domains. |
 | F-04 | FW-8, FW-9 | The Collector stub delays its response. | Before the receipt, the forwarder reports at most custody to the upstream. After it, acceptance. |
@@ -932,14 +997,11 @@ No media types or link relations are registered. Problem `type` URIs under `http
 
 - RFC 2119, RFC 8174: requirement keywords
 - RFC 3339: timestamps
-- RFC 4648: base64url encoding
 - RFC 6749, RFC 6750: OAuth 2.0 and bearer tokens
-- RFC 8032: Ed25519
 - RFC 8259: JSON
 - RFC 8414: OAuth 2.0 Authorization Server Metadata
 - RFC 8446: TLS 1.3
 - RFC 8615: Well-known URIs
-- RFC 8785: JSON Canonicalization Scheme
 - RFC 9110: HTTP Semantics
 - RFC 9457: Problem Details for HTTP APIs
 - RFC 9562: UUIDs
@@ -947,6 +1009,7 @@ No media types or link relations are registered. Problem `type` URIs under `http
 
 ### 17.2 Informative
 
+- RFC 4648, RFC 8032, RFC 8785: base64url, Ed25519, and JSON Canonicalization Scheme. They are used by the GovOps v1 profile. This API does not require them.
 - RFC 7493: I-JSON
 - RFC 8705: OAuth mutual-TLS client authentication and certificate-bound tokens
 - RFC 8707: Resource Indicators for OAuth 2.0
@@ -1088,7 +1151,8 @@ info:
     Markdown specification disagree, the Markdown specification governs.
     The structure of a TRACE record is defined by the TRACE record profile, not by this file;
     `SignedTraceRecord` below constrains only the members a Collector needs to route, identify,
-    and verify a record.
+    and verify a record. Signature algorithms, canonicalization, and content-digest construction are
+    defined by the record's profile and advertised per profile in Collector metadata.
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -1257,11 +1321,12 @@ paths:
                     api_versions_supported: [v1]
                     trace_ingestion_endpoint: https://collector.example.org/api/v1/audit/trace
                     trace_bulk_ingestion_endpoint: https://collector.example.org/api/v1/audit/trace/bulk
-                    trace_profiles_supported:
-                      - tag:govops.owasp.org,2026:trace-v1
-                    event_kinds_supported: [AUTHORIZATION_DECISION, CAPABILITY_INVOKED, RUNTIME_EFFECT]
-                    signature_algorithms_supported: [Ed25519]
-                    canonicalization_methods_supported: [RFC8785]
+                    trace_profiles:
+                      - profile: tag:govops.owasp.org,2026:trace-v1
+                        signature_algorithms_supported: [Ed25519]
+                        canonicalization: RFC8785
+                        content_digest_algorithm: sha256
+                        event_kinds_supported: [AUTHORIZATION_DECISION, CAPABILITY_INVOKED, RUNTIME_EFFECT]
                     authorization_servers: [https://auth.example.org]
                     ingestion_scope: trace.write
                     scopes_supported: [trace.write]
@@ -1410,15 +1475,16 @@ components:
             sequence_number: {type: integer, minimum: 1}
             prev_record_hash:
               type: string
-              pattern: '^sha256:[0-9a-f]{64}$'
+              description: Predecessor digest, or the sentinel the record's profile defines for the first record of a chain.
+              minLength: 1
           additionalProperties: true
         parent_record_ids:
           type: array
           items: {type: object}
         signature:
           type: string
-          description: Unpadded base64url encoding of the 64-byte Ed25519 signature.
-          pattern: '^[A-Za-z0-9_-]{86}$'
+          description: Signature value. Algorithm, input, and encoding are defined by the record's profile, not by this API.
+          minLength: 1
       additionalProperties: true
     AcceptanceReceipt:
       type: object
@@ -1443,7 +1509,8 @@ components:
         record_id: {type: string}
         content_digest:
           type: string
-          pattern: '^sha256:[0-9a-f]{64}$'
+          pattern: '^[a-z0-9][a-z0-9-]*:[A-Za-z0-9_+/=.-]+$'
+          description: "`<algorithm>:<value>`, constructed as the record's profile defines."
         receipt_id:
           type: string
           description: Opaque identifier, unique within the evidence domain, stable across replays.
@@ -1514,6 +1581,7 @@ components:
         - MISSING_EXECUTION_CONTEXT
         - PRODUCER_IDENTITY_MISMATCH
         - SIGNATURE_MALFORMED
+        - UNSUPPORTED_ALGORITHM
         - KEY_UNKNOWN
         - KEY_NOT_VALID
         - EVENT_KIND_NOT_AUTHORIZED
@@ -1546,8 +1614,7 @@ components:
         - issuer
         - api_versions_supported
         - trace_ingestion_endpoint
-        - trace_profiles_supported
-        - signature_algorithms_supported
+        - trace_profiles
         - authorization_servers
         - ingestion_scope
         - max_record_bytes
@@ -1566,20 +1633,29 @@ components:
           type: string
           format: uri
           description: Absent if the Collector does not implement bulk submission.
-        trace_profiles_supported:
+        trace_profiles:
           type: array
           minItems: 1
-          items: {type: string}
-        event_kinds_supported:
-          type: array
-          items: {type: string}
-        signature_algorithms_supported:
-          type: array
-          minItems: 1
-          items: {type: string}
-        canonicalization_methods_supported:
-          type: array
-          items: {type: string}
+          description: One entry per supported TRACE record profile, with that profile's cryptographic capabilities.
+          items:
+            type: object
+            required: [profile, signature_algorithms_supported, canonicalization, content_digest_algorithm]
+            properties:
+              profile:
+                type: string
+                description: The `trace.eat_profile` value.
+              signature_algorithms_supported:
+                type: array
+                minItems: 1
+                items: {type: string}
+              canonicalization:
+                type: string
+              content_digest_algorithm:
+                type: string
+              event_kinds_supported:
+                type: array
+                items: {type: string}
+            additionalProperties: true
         authorization_servers:
           type: array
           minItems: 1
@@ -1614,7 +1690,7 @@ components:
 
 ## Appendix C. Conformance test vectors
 
-The vectors are normative inputs and expected results for the tests in §15. All signatures were produced with the **non-production test keys below**; their seeds are published on purpose so that implementations can regenerate and extend the vectors. Never register these keys outside a test deployment.
+The vectors are normative inputs and expected results for the tests in §15. **They belong to the profile `tag:govops.owasp.org,2026:trace-v1`**, whose cryptographic suite is Ed25519 signatures, RFC 8785 (JCS) canonicalization, and SHA-256 content digests. The suite is the profile's, not the API's. The API behavior under test (acceptance, replay, conflict, rejection, flags) is independent of it, and a Collector that lists another profile needs equivalent vectors from that profile (§15.2). All signatures were produced with the **non-production test keys below**; their seeds are published on purpose so that implementations can regenerate and extend the vectors. Never register these keys outside a test deployment.
 
 ### C.1 Test keys
 
@@ -1625,7 +1701,7 @@ The vectors are normative inputs and expected results for the tests in §15. All
 
 Each seed is the SHA-256 of an ASCII label, `govops-trace-collector-test/<producer_id>/<kid>`. The public key JWK is `{"kty":"OKP","crv":"Ed25519","x":"<value>"}`.
 
-### C.2 How the vectors were produced
+### C.2 How the vectors were produced (profile `tag:govops.owasp.org,2026:trace-v1`)
 
 Each signed record is a JSON object whose signature input is `JCS(record without "signature")`. The signature is Ed25519 over those UTF-8 bytes, encoded as unpadded base64url. The `content_digest` is `sha256:` and the lowercase hex SHA-256 of `JCS(record including "signature")`. For these vectors, which contain only ASCII member names and string, integer, and null values, JCS output equals compact JSON with members sorted by name.
 

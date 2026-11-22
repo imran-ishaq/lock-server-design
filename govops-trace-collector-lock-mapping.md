@@ -20,7 +20,7 @@ Section references of the form `§n` without a document name refer to the standa
 
 | # | Topic | What the documents say | Resolution in the standard |
 |---|---|---|---|
-| 1 | Profile identifier | MVP §7 fixes `tag:jans.io,2026:trace-v1`. `govops-trace-profile.md` §2 fixes `tag:govops.owasp.org,2026:trace-v1`. The context notes record a third spelling (`govops`) in the upstream working-group dump. | `trace_profiles_supported` lists every accepted tag. Lock lists both of its tags while it migrates. The standard's vectors use the GovOps tag. |
+| 1 | Profile identifier | MVP §7 fixes `tag:jans.io,2026:trace-v1`. `govops-trace-profile.md` §2 fixes `tag:govops.owasp.org,2026:trace-v1`. The context notes record a third spelling (`govops`) in the upstream working-group dump. | `trace_profiles` lists every accepted tag. Lock lists both of its tags while it migrates. The standard's vectors use the GovOps tag. |
 | 2 | Discovery document | Lock serves `/.well-known/lock-server-configuration`. The Cedarling documentation cites `.well-known/lock-master-configuration`. Neither describes TRACE endpoints. | New `/.well-known/govops-trace-configuration` (§11). Producers such as Cedarling use it for `CEDARLING_TRACE_ENDPOINT` discovery. |
 | 3 | Ingestion scope name | MVP §11 hardcodes `https://jans.io/oauth/lock/trace.write`. | The standard requires publishing `ingestion_scope` (§4.3). Lock publishes its URI. |
 | 4 | Bulk status code | MVP §11.2: `207` "or `200` per a consistently-chosen contract". Implemented Lock bulk endpoints return `200`. | `200` whenever the envelope was processed; per-record results carry the outcome. `207` is not used, which also matches the implemented bulk endpoints (§8.3). |
@@ -40,6 +40,7 @@ Section references of the form `§n` without a document name refer to the standa
 | 17 | Submitter vs producer permission | MVP §4.2 allows a forwarding client only by configuration, but the processing order (§5) never places that check before key lookup. | Explicit step 7 and `403 SUBMITTER_NOT_AUTHORIZED` (§4.5, §4.6). |
 | 18 | Retrieval ambiguity status | `design.md`: `300`, or `409` when `Accept` demands one body. | Retrieval is out of scope for the standard. Note for a future retrieval specification. |
 | 19 | Receipt-chain details | The receipt profile differs between documents (seven members in the MVP, an extra `receipt_profile` in the GovOps profile and `jans-trace-core`). | Not standardized. The receipt chain is a Collector-internal detail (§1.2). |
+| 20 | Where the cryptographic suite lives | MVP §6 and `jans-trace-core` §6 fix Ed25519, JCS and SHA-256 for Lock, and defer algorithm agility. `govops-trace-profile.md` §1 fixes Ed25519 for the GovOps MVP. The suite is therefore specified in three places and tied to Lock. | The standard defers all of it to the record profile and advertises it per profile (§5.3, §11.2.1). A future profile (for example hardware-backed ECDSA) needs no new API version. |
 
 ## 3. Mapping by section
 
@@ -57,7 +58,7 @@ Status values: **Conforms** (design already satisfies the requirement), **Change
 | §4.6 | Processing order | MVP §5 differs (inconsistency 12). | Change | Reorder: replay detection after structural checks and before key-validity checks. Conflict only after signature verification. |
 | §5.1 | JSON only; optional gzip | JSON. Gzip unspecified. | Conforms | Gzip is optional. If enabled, enforce decoded-size limits during decompression. |
 | §5.2 | Strict JSON | `jans-trace-core` §6.2 rejects duplicate members, bad UTF-8, trailing data, non-objects. | Conforms | Map library codes (section 4 below). |
-| §5.4, §5.5 | Ed25519, unpadded base64url, JCS, `content_digest` | `jans-trace-core` §6. | Conforms | None. |
+| §5.3 to §5.5 | Algorithms, signature input, canonicalization and digest come from the profile; no independent negotiation | `jans-trace-core` §6 implements Ed25519, JCS, SHA-256 and fixes them, with no algorithm agility. | Conforms for the current profiles | None now. To support another profile, add a per-profile suite selection keyed by `trace.eat_profile` in `jans-trace-core`, and never select the algorithm from request data. |
 | §5.6 | Canonical `record_id` forms | MVP §7.1 says UUID or ULID only. | Change | Enforce lowercase UUID / uppercase ULID. Fix non-conforming examples in MVP §7 and `govops-trace-profile.md`. |
 | §5.7 | Preserve assertion and raw bytes | `design.md` Component 1. | Conforms | None. |
 | §5.8 | Published limits, minimums, `413` | `design.md` Operational Limits: 256 KiB, arrays; batch limits unspecified. | Change | Fix defaults (record 262,144 bytes; batch bytes; batch records; depth). Return `413` for byte limits. Lock's API limit must not exceed the `jans-trace-core` limit. |
@@ -92,6 +93,7 @@ Status values: **Conforms** (design already satisfies the requirement), **Change
 | `KEY_UNKNOWN` | "Unknown or untrusted producer" | `KID_MISMATCH` |
 | `KEY_NOT_VALID` | MVP §6 validity window and revocation | n/a (registry check) |
 | `EVENT_KIND_NOT_AUTHORIZED` | MVP §6, §12 (`authorized_event_kinds`) | n/a (registry check) |
+| `UNSUPPORTED_ALGORITHM` | n/a (the MVP has one algorithm) | `INVALID_PUBLIC_KEY` when a registered key's type does not match the profile's algorithm |
 | `SIGNATURE_INVALID` | "Signature verification failure" | `SIGNATURE_INVALID` |
 | `RECORD_ID_CONFLICT` | "Content conflict" (`409`) | n/a |
 | `REQUEST_TOO_LARGE`, `RECORD_TOO_LARGE` | Operational Limits | `SIZE_LIMIT_EXCEEDED` |
@@ -105,9 +107,9 @@ Status values: **Conforms** (design already satisfies the requirement), **Change
 |---|---|
 | `issuer` | Existing `getBaseEndpoint()` host. |
 | `trace_ingestion_endpoint`, `trace_bulk_ingestion_endpoint` | `getBaseEndpoint()` + `/audit/trace`, `/audit/trace/bulk`. |
-| `trace_profiles_supported` | `tag:govops.owasp.org,2026:trace-v1` and `tag:jans.io,2026:trace-v1` during migration. |
-| `event_kinds_supported` | MVP §7.2: `AUTHORIZATION_DECISION`, `CAPABILITY_INVOKED`, `RUNTIME_EFFECT`. |
-| `signature_algorithms_supported`, `canonicalization_methods_supported` | `["Ed25519"]`, `["RFC8785"]` (`jans-trace-core` §6.1). |
+| `trace_profiles[].profile` | `tag:govops.owasp.org,2026:trace-v1` and `tag:jans.io,2026:trace-v1` during migration, each with the same suite. |
+| `trace_profiles[].event_kinds_supported` | MVP §7.2: `AUTHORIZATION_DECISION`, `CAPABILITY_INVOKED`, `RUNTIME_EFFECT`. |
+| `trace_profiles[].signature_algorithms_supported`, `.canonicalization`, `.content_digest_algorithm` | For each listed profile: `["Ed25519"]`, `"RFC8785"`, `"sha256"` (`jans-trace-core` §6.1). |
 | `authorization_servers`, `ingestion_scope` | Lock's trusted OAuth issuers; `https://jans.io/oauth/lock/trace.write`. |
 | `max_record_bytes`, `max_batch_bytes`, `max_batch_records`, `max_nesting_depth` | New Lock configuration properties, bounded by the `jans-trace-core` limits (§11 of that document). |
 | `execution_correlation_required` | `true` for the MVP. |
@@ -124,7 +126,7 @@ Ordered by dependency.
 4. **Bulk.** `200`, `index`, per-element Problem errors, array-order identity semantics, `BATCH_*` envelope errors (§8).
 5. **Limits.** Configuration properties and defaults; `413` for bytes; enforce before verification (§5.8).
 6. **Record identity.** Enforce canonical `record_id` forms (§5.6).
-7. **Profiles.** Accept both profile tags and publish them.
+7. **Profiles.** Accept both profile tags and publish each as a `trace_profiles` entry with its suite. Key the cryptographic suite by `trace.eat_profile` inside `jans-trace-core` so later profiles can add algorithms without an API change.
 8. **Discovery.** Implement `/.well-known/govops-trace-configuration` (§11). Update Cedarling's endpoint discovery to use it, and correct the `lock-master-configuration` reference.
 9. **Authorization.** Add the Cedarling policies for the two TRACE endpoints and the forwarder-to-producer binding.
 10. **Conformance.** Run the standard's test suite (§15, Appendix C) in Lock's CI. Provide the `(hook)` facilities: fault injection at the commit point, record-store inspection, key revocation.
