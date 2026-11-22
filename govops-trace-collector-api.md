@@ -199,7 +199,7 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation; check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
 | 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | `400 SIGNATURE_MALFORMED`, `UNSUPPORTED_ALGORITHM`, `SIGNATURE_INVALID` |
 | 13 | If the identity exists with a different digest | `409 RECORD_ID_CONFLICT` |
-| 14 | Evaluate producer-chain position and set integrity flags | none: flags |
+| 14 | Check chain admission (§7.4.1); if admitted, evaluate integrity and completeness and set the flags (§7.4.2, §7.4.3) | `400 CHAIN_NOT_REGISTERED`; otherwise none: flags |
 | 15 | Atomically and durably commit the record and its receipt | `503 COLLECTOR_UNAVAILABLE`, `500 INTERNAL_ERROR` |
 | 16 | Return the receipt | none |
 
@@ -367,6 +367,7 @@ The body is exactly one record. No wrapper object is used.
 | `idempotent_replay` | REQUIRED | `false` on first acceptance; `true` when the response repeats an earlier acceptance. |
 | `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, `late_flag` | REQUIRED | Integrity flags as of the moment of original acceptance (§7.4). |
 | `unattributed_flag` | CONDITIONAL | REQUIRED if the Collector accepts records without correlation context (§7.5). |
+| `chain_admission` | OPTIONAL | How the record's chain was admitted: `pre_registered_genesis`, `first_observed_genesis`, or `linked_restart_genesis` (§7.4.1). RECOMMENDED when the Collector lists more than one mode. |
 | `receipt_sequence` | OPTIONAL | Position in a Collector-internal receipt chain, if the Collector exposes one. Clients MUST NOT depend on its presence. |
 
 A Collector MAY add members. A client MUST ignore members it does not recognize. This document does not standardize the Collector's internal receipt chain, commitment profile, checkpoints, or settlement status; a Collector exposing them does so through extension members.
@@ -409,20 +410,80 @@ Consequences:
 
 A receipt establishes only: "This Collector, within this evidence domain, verified these bytes against a registered key and durably accepted them at `received_at`." It is not a signature by the Collector. A Collector that wants to provide a signed or anchored receipt does so through an extension and separate specification.
 
-### 7.4 Producer-chain flags
+### 7.4 Producer chains: admission, integrity, completeness
 
-Producers sequence their records in chains (`producer_chain`). Records may arrive out of order. The Collector evaluates position by `sequence_number`, never by arrival order, and sets these flags in the receipt. Flags describe the state at the moment of acceptance and are reproduced unchanged on replay. Current state is available through retrieval interfaces outside this document.
+Producers sequence their records in chains. A chain is identified by `(producer_id, producer_instance_id, producer_chain_id)`, and a record's position in it by `sequence_number`. Records may arrive in any order.
 
-| Flag | Set when | Rejection? |
+Three different questions are asked about a chain. They have different answers, are evaluated independently, and have different effects on the response.
+
+| Concern | Question | Possible outcome |
 |---|---|---|
-| `coverage_gap_flag` | The record at `sequence_number − 1` on the same `(producer_id, producer_instance_id, producer_chain_id)` is not held. | No. The record is accepted. |
-| `chain_link_failure_flag` | The record at `sequence_number − 1` is held, but its `content_digest` differs from this record's `prev_record_hash`. | No. The record is accepted. |
-| `equivocation_flag` | A different record, with a different `record_id` and a valid signature, is already held at the same `(producer_id, producer_instance_id, producer_chain_id, sequence_number)`. | No. Both records are retained and flagged. The Collector MUST NOT silently select one. |
-| `late_flag` | The Collector's receipt time is later than `signed_at` by more than a configured lateness policy. | No. Lateness alone is never a reason to reject. |
+| **Admission** | Is this producer authorized to establish or extend this chain on this Collector? | Admitted, or **rejected** with `CHAIN_NOT_REGISTERED`. The only chain-related ground for rejection. |
+| **Integrity** | Does the record link correctly: consecutive position, matching predecessor hash, one record per position? | Always accepted. Reported by `chain_link_failure_flag` and `equivocation_flag`. |
+| **Completeness** | Are the earlier records of the chain held? | Always accepted. Reported by `coverage_gap_flag`. |
 
-The genesis record uses `sequence_number: 1` and the predecessor sentinel defined by the record's profile (for the GovOps v1 profile, `sha256:` followed by 64 zeros). A Collector accepts a first record of a chain from any registered key (`first_observed_genesis`), and MAY additionally support chains whose genesis was registered in advance (`pre_registered_genesis`). The modes it supports are published as `producer_chain_registration_modes_supported`. Supporting a mode determines how the Collector assesses lineage later; it does not change what this API returns.
+Rules:
+
+1. Admission does not depend on integrity or completeness. A record is not rejected because its predecessor is missing, and it is not admitted because its predecessor is present. Whether a chain is admitted depends only on the Collector's registration modes (§7.4.1) and the chain's registration.
+2. Integrity and completeness findings never cause rejection, and never depend on arrival order. Chain position is evaluated by `sequence_number`.
+3. A record that fails key or signature verification MUST NOT create, anchor, or alter any chain state. Admission is evaluated only for a verified record (§4.6 step 14).
+4. Admission is a property of the chain, not of the key. A key authorized for an event kind (§4.5) does not by itself make a chain registered.
+
+#### 7.4.1 Chain admission and registration modes
+
+A **registration mode** states how a Collector establishes the beginning of a chain. The Collector publishes the modes it supports as `producer_chain_registration_modes_supported` (§11.2).
+
+| Mode | Meaning |
+|---|---|
+| `pre_registered_genesis` | An administrator registers the chain before the Collector sees its records (for example by `producer_id` and `producer_chain_id`, and optionally `producer_instance_id` and the expected genesis `record_id`). The mechanism is out of scope. |
+| `first_observed_genesis` | The Collector anchors a chain the first time it sees a verified record of it, with no prior registration. The anchor fixes what the Collector saw. It does not show that the producer had no earlier chain. |
+| `linked_restart_genesis` | The Collector admits a new chain whose genesis carries a signed link, defined by the profile, to the head of a chain of the same producer that the Collector has already admitted. |
+
+A Collector MUST list at least one of `first_observed_genesis` and `pre_registered_genesis`. The modes it lists decide what happens to a record of a chain that is **not registered** (the Collector has no registration for it and has not previously admitted it):
+
+| Modes listed | Record of a registered chain | Record of an unregistered chain |
+|---|---|---|
+| `first_observed_genesis` only | not applicable (no registration is offered) | **Admitted.** The chain is anchored at first sight. |
+| `pre_registered_genesis` only | **Admitted**, in any arrival order, including before the genesis record | **Rejected:** `400 CHAIN_NOT_REGISTERED`, whether the record is a genesis or not. Nothing is stored and no chain is created. |
+| both | **Admitted.** The chain is classified as pre-registered. | **Admitted.** The chain is anchored at first sight. |
+
+`linked_restart_genesis` may be listed in addition. It adds one case: a record that is the genesis of a chain carrying a valid link (see "A link is valid" in this subsection) is admitted whichever of the rows above applies. A record of an unregistered chain without such a link is treated by the row above.
+
+Further rules:
+
+- **Admission is remembered.** Once a chain is admitted, later records of it are admitted without re-evaluating registration. Removing a registration later does not unadmit a chain or its accepted records.
+- **First-sight anchoring is not authentication of history.** Under `first_observed_genesis`, a record of an unknown chain that is not at `sequence_number` 1 is admitted, the chain is anchored at that first observed record, and `coverage_gap_flag` is true. If the genesis record arrives later, it is accepted and is not rejected for arriving late. Whether such a chain counts as having an authenticated start is an assessment outside this API.
+- **A rejected record leaves no trace.** A `CHAIN_NOT_REGISTERED` rejection is terminal for that chain until an administrator registers it. After registration, the same bytes can be resubmitted and are accepted as a first acceptance.
+- **Registration does not weaken verification.** A record of a registered chain still has to pass steps 9 to 14 of §4.6.
+- **A link is valid** for `linked_restart_genesis` when the record's profile-defined link names a chain of the same `producer_id`, in the same evidence domain, that the Collector has admitted. Further validation of the link is profile-defined.
+- **Reporting.** A receipt MAY carry `chain_admission` with one of the mode identifiers, stating how this record's chain was admitted. A Collector that lists more than one mode SHOULD include it.
+
+#### 7.4.2 Integrity flags
+
+| Flag | Set when |
+|---|---|
+| `chain_link_failure_flag` | (a) The record at `sequence_number − 1` is held, but its `content_digest` differs from this record's `prev_record_hash`; or (b) the record is at `sequence_number` 1 and does not carry the profile's genesis sentinel, or is at a later position and does carry it (a forged origin). Case (b) applies whether or not the predecessor is held. |
+| `equivocation_flag` | A different record, with a different `record_id` and a valid signature, is already held at the same `(producer_id, producer_instance_id, producer_chain_id, sequence_number)`. Both records are retained and flagged, and the Collector MUST NOT silently select one. |
+
+An integrity flag does not clear itself when more records arrive, because the conflicting data is already present. The genesis sentinel is defined by the record's profile (for the GovOps v1 profile, `sha256:` followed by 64 zeros).
 
 A same-`record_id` resubmission with different content is a **conflict** (§9), not an equivocation.
+
+#### 7.4.3 Completeness flag
+
+| Flag | Set when |
+|---|---|
+| `coverage_gap_flag` | The record at `sequence_number − 1` on the same chain is not held, and this record is not at `sequence_number` 1. |
+
+A gap is a statement about what the Collector holds at the moment of acceptance, not an error. When the missing record later arrives it is accepted and links correctly. The flag in an earlier receipt is not changed (§9). A deployment that needs to know whether a chain is complete asks the Collector's retrieval and assessment interfaces, which are outside this document.
+
+#### 7.4.4 Other flag and snapshot semantics
+
+| Flag | Set when |
+|---|---|
+| `late_flag` | The Collector's receipt time is later than `signed_at` by more than a configured lateness policy. Lateness alone is never a reason to reject. |
+
+All flags describe the state at the moment of original acceptance and are reproduced unchanged on replay.
 
 ### 7.5 Missing correlation context
 
@@ -495,7 +556,8 @@ When the envelope was valid and the Collector processed the batch, the status is
 ### 8.4 Ordering
 
 - Producers SHOULD place records of the same chain in ascending `sequence_number` order, and a Collector SHOULD process them in that order, but neither is required for correctness.
-- A Collector MUST NOT reject, or give a different outcome to, a record because it arrived before its predecessor (§7.4). Chain position is assessed by `sequence_number`.
+- A Collector MUST NOT reject, or give a different outcome to, a record because its predecessor has not arrived. That is a completeness finding (`coverage_gap_flag`, §7.4.3). Chain position is assessed by `sequence_number`.
+- Chain admission (§7.4.1) is separate and does not depend on order. Where only `pre_registered_genesis` is listed, a record of a registered chain is admitted whatever its position, and a record of an unregistered chain is rejected with `CHAIN_NOT_REGISTERED` whatever its position, including when it is the genesis record.
 - No ordering is guaranteed or implied between records of different chains, producers, or batches. Receipt order is the Collector's order of acceptance, not a global event order.
 
 ### 8.5 Retry
@@ -576,6 +638,7 @@ An error body MUST NOT contain a bearer token, signed record content, a signatur
 | `PRODUCER_IDENTITY_MISMATCH` | 400 | no | `producer` differs from `producer_chain.producer_id` | Terminal for that record |
 | `SIGNATURE_MALFORMED` | 400 | no | The signature encoding is invalid under the record's profile | Terminal for that record |
 | `UNSUPPORTED_ALGORITHM` | 400 | no | The algorithm needed to verify the record is not supported for its profile, or does not match the registered key's algorithm | Terminal for that record |
+| `CHAIN_NOT_REGISTERED` | 400 | no | The record's chain is not registered and the Collector does not admit chains at first sight (§7.4.1) | Operator registers the chain, then resubmit |
 | `KEY_UNKNOWN` | 400 | no | No key registered for `(domain, producer_id, kid)` | Operator registers key |
 | `KEY_NOT_VALID` | 400 | no | Key outside its validity window or revoked | Operator action |
 | `EVENT_KIND_NOT_AUTHORIZED` | 400 | no | Key may not sign this `event_kind` | Operator action |
@@ -636,7 +699,7 @@ Host: collector.example.org
 | `max_nesting_depth` | integer | RECOMMENDED | Maximum JSON nesting depth. |
 | `bulk_mixed_producers_supported` | boolean | OPTIONAL | Default `false`. |
 | `execution_correlation_required` | boolean | RECOMMENDED | Whether records without the full correlation pair are rejected (§7.5). Default `true` when absent. |
-| `producer_chain_registration_modes_supported` | array of string | REQUIRED | Any of `first_observed_genesis`, `pre_registered_genesis`, `linked_restart_genesis`. A Collector MUST support `first_observed_genesis` or `pre_registered_genesis` and MUST list every mode it supports. |
+| `producer_chain_registration_modes_supported` | array of string | REQUIRED | Any of `first_observed_genesis`, `pre_registered_genesis`, `linked_restart_genesis`. MUST contain `first_observed_genesis` or `pre_registered_genesis`, and MUST list every mode the Collector supports. The set decides how unregistered chains are treated (§7.4.1): if it contains `first_observed_genesis`, a record of an unregistered chain is admitted; if it contains only `pre_registered_genesis`, such a record is rejected with `CHAIN_NOT_REGISTERED`. |
 | `acceptance_durability` | string | OPTIONAL | `local_durable` or `replicated_durable` (§7.2). A Collector that omits it makes no replication claim. |
 | `content_encodings_supported` | array of string | OPTIONAL | For example `["gzip"]`. Absent means none. |
 
@@ -836,7 +899,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 
 | Class | Applies to | Must satisfy |
 |---|---|---|
-| **Collector** | A server offering the single-record endpoint and metadata | §3, §4, §5, §6, §7, §9, §10, §11, §12.2, and tests C-*, D-*, X-* |
+| **Collector** | A server offering the single-record endpoint and metadata | §3, §4, §5, §6, §7, §9, §10, §11, §12.2, and tests C-*, G-*, D-* |
 | **Collector-Bulk** | A Collector that also offers the bulk endpoint | the Collector class, §8, and tests B-* |
 | **Producer** | A component that signs records and submits them directly or through an intermediary | §5.3 to §5.6, §10.3, and tests P-* |
 | **Forwarder** | A component that relays records from producers to a Collector | §12.1 and tests F-* |
@@ -860,7 +923,8 @@ Unless a test says otherwise, it starts from an empty record store and this conf
 | Client `c-d2` | bound to `D2`; ingestion scope; may submit for `pdp-fleet-1`; no keys registered in `D2` |
 | Registry `D1` | `pdp-fleet-1` / `key-2026-01` authorizing `AUTHORIZATION_DECISION`; `payments-gateway-pep` / `pep-key-2026-01` authorizing `CAPABILITY_INVOKED`. Public keys are in Appendix C.1. |
 | Profile | The Appendix C vectors belong to profile `tag:govops.owasp.org,2026:trace-v1` (Ed25519, RFC 8785 canonicalization, SHA-256). A Collector listing any other profile MUST also pass the tests below with vectors from that profile (positive, tampered, malformed signature, unsupported algorithm, and the chain cases). |
-| Metadata | `execution_correlation_required: true`, `bulk_mixed_producers_supported: false`, `first_observed_genesis` supported, `trace_profiles` contains `tag:govops.owasp.org,2026:trace-v1` |
+| Registration modes | Default **M1**: `producer_chain_registration_modes_supported` is `[first_observed_genesis]` and no chain is registered. Variant **M2**: `[pre_registered_genesis]`, with chain `chain-pdp-001-a` registered for `pdp-fleet-1` (instance `pdp-001`) and no other chain registered. Variant **M3**: `[first_observed_genesis, pre_registered_genesis]` with the same registration as M2. A Collector runs the tests for each variant it can be configured as, and states which. |
+| Metadata | `execution_correlation_required: true`, `bulk_mixed_producers_supported: false`, `trace_profiles` contains `tag:govops.owasp.org,2026:trace-v1` |
 | Limits | The Collector's published limits. Tests that exceed a limit read it from metadata. |
 
 Vector identifiers (`V-nn`) refer to Appendix C.
@@ -882,9 +946,9 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-11 | §5.4 | Submit V-16. | `400 SIGNATURE_MALFORMED`. |
 | C-12 | §5.6 | Submit V-17. | `400 SCHEMA_INVALID`. |
 | C-13 | §5.2 | Submit V-18 as the raw body. | `400 MALFORMED_JSON`. No record is accepted. |
-| C-14 | §7.4 | Submit V-02, then V-01. | V-02: `201`, `coverage_gap_flag` true. V-01: `201`, all flags false. Neither is rejected for arrival order. |
-| C-15 | §7.4 | Submit V-01, then V-22. | V-22: `201`, `chain_link_failure_flag` true. |
-| C-16 | §7.4 | Submit V-01, then V-21. | V-21: `201`, `equivocation_flag` true. Both records are retained **(hook)**. |
+| C-14 | §7.4.3 | Submit V-02, then V-01. | V-02: `201`, `coverage_gap_flag` true. V-01: `201`, all flags false. Neither is rejected for arrival order. |
+| C-15 | §7.4.2 | Submit V-01, then V-22. | V-22: `201`, `chain_link_failure_flag` true. |
+| C-16 | §7.4.2 | Submit V-01, then V-21. | V-21: `201`, `equivocation_flag` true. Both records are retained **(hook)**. |
 | C-17 | §4.2 | Submit V-01 with no token, then with an expired token. | `401 UNAUTHENTICATED`, with `WWW-Authenticate`. |
 | C-18 | §4.3 | `c-ro` submits V-01. | `403 INSUFFICIENT_SCOPE`. |
 | C-19 | §4.4 | `c-nodom` submits V-01. | `403 EVIDENCE_DOMAIN_NOT_BOUND`. |
@@ -903,6 +967,23 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-32 | §7.1 | Submit a record that fails verification on a Collector that quarantines **(hook)**. | Response is a rejection with no receipt. The record is absent from retrieval and correlation. |
 | C-33 | §7.2 **(hook)** | Kill the Collector between accepting a request and the durable commit. | No receipt was returned. After restart, resubmission is a first acceptance. |
 | C-34 | §12.2 CO-3 | `c-fwd` submits V-01 and V-03. Retrieve the stored assertions. | The canonical form of each stored assertion equals that of the submitted record. The forwarder is not recorded as the producer. |
+
+#### Chain admission tests
+
+These tests check §7.4. Each names the registration-mode variant (§15.2) it applies to. `chain_admission`, where the Collector returns it, is checked as shown.
+
+| ID | Variant | Procedure | Expected |
+|---|---|---|---|
+| G-01 | M1 | Submit V-01, then V-04 (a different, unregistered chain). | Both `201`. Neither is rejected for lack of registration. `chain_admission`, if present, is `first_observed_genesis`. |
+| G-02 | M1 | Submit V-24 (an unregistered chain, `sequence_number` 3, no genesis held). | `201` with `coverage_gap_flag` true. A non-genesis first record is admitted and flagged, not rejected. |
+| G-03 | M2 | Submit V-01. Submit V-04. Submit V-24. | V-01: `201`. V-04 and V-24: `400 CHAIN_NOT_REGISTERED`, `retryable` false, with no chain or record stored **(hook)**. A genesis record of an unregistered chain is rejected the same way as a non-genesis one. |
+| G-04 | M2 | Submit V-02, then V-01 (registered chain, arriving out of order). | V-02: `201` with `coverage_gap_flag` true. V-01: `201`. A registered chain is admitted in any arrival order. |
+| G-05 | M2 | Submit V-05 (unregistered chain). Register chain `chain-pdp-001-d` **(hook)**. Resubmit V-05. | First: `400 CHAIN_NOT_REGISTERED`. Second: `201` as a first acceptance (`idempotent_replay` false). |
+| G-06 | M3 | Submit V-01, then V-04. | Both `201`. `chain_admission`, if present: `pre_registered_genesis` for V-01, `first_observed_genesis` for V-04. |
+| G-07 | M1 | Submit V-10 (invalid signature), then V-01. | V-10: `400 SIGNATURE_INVALID`. V-01: `201`, all flags false. The rejected record created no chain state **(hook)**. |
+| G-08 | M1, M2, M3 | On an empty store, submit V-23 (a record at `sequence_number` 2 that carries the genesis sentinel). | `201` with `chain_link_failure_flag` true and `coverage_gap_flag` true. A forged origin is flagged even though no predecessor is held. In M2 the chain (`chain-pdp-001-a`) is registered, so admission succeeds. |
+| G-09 | M2 **(hook)** | Submit V-01. Remove the registration of `chain-pdp-001-a`. Submit V-02. | V-02: `201`. A chain admitted earlier remains admitted. |
+| G-10 | M1, M2, M3 | Submit V-01, V-02 in both orders (separate runs). | Both runs accept both records. Only `coverage_gap_flag` on the first-arriving V-02 differs. Admission is independent of order. |
 
 ### 15.4 Bulk tests
 
@@ -934,7 +1015,7 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | D-05 | §11.2 | Submit V-15 (profile not listed). Submit V-01 (profile listed). | `UNSUPPORTED_PROFILE`; accepted. |
 | D-06 | §4.2, §11.2 | Use a valid token from a listed authorization server, then one from an unlisted issuer. | Accepted; `401 UNAUTHENTICATED`. |
 | D-07 | §11.2 | Inspect the document. | No tenant, client, producer, or key information. |
-| D-08 | §11.2 | Inspect `producer_chain_registration_modes_supported`. | Contains `first_observed_genesis` or `pre_registered_genesis`, and only modes the Collector supports. |
+| D-08 | §7.4.1, §11.2 | Inspect `producer_chain_registration_modes_supported`, then run G-* for the variant it describes. | Contains `first_observed_genesis` or `pre_registered_genesis`, and only modes the Collector supports. Behavior for an unregistered chain matches the set: admitted if `first_observed_genesis` is listed, `CHAIN_NOT_REGISTERED` otherwise. |
 | D-09 | §5.3, §11.2.1 | Inspect each `trace_profiles` entry. | Each has `profile`, `signature_algorithms_supported`, `canonicalization`, and `content_digest_algorithm`. For each, the `<algorithm>` prefix of receipt `content_digest` values for that profile equals `content_digest_algorithm`. |
 | D-10 | §5.3, §5.4 | For a profile listing more than one algorithm, submit a record whose key algorithm is not in that profile's list. For two profiles with different suites, submit one record for each. | `400 UNSUPPORTED_ALGORITHM` for the first. Each record in the second case is verified only with its own profile's suite, and the Collector does not accept an algorithm named in a request header. |
 
@@ -1124,7 +1205,18 @@ Content-Type: application/problem+json
 {"type":"https://govops.owasp.org/trace/errors/rate-limited","title":"Rate limit exceeded","status":429,"code":"RATE_LIMITED","retryable":true}
 ```
 
-### A.9 Storage unavailable
+### A.9 Unregistered chain under a registered-only Collector (vector V-04)
+
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json
+
+{"type":"https://govops.owasp.org/trace/errors/chain-not-registered","title":"The record's producer chain is not registered","status":400,"code":"CHAIN_NOT_REGISTERED","retryable":false,"producer_id":"pdp-fleet-1","record_id":"0191f3a0-7b2a-72e6-93ad-06e5d9c2b3ad"}
+```
+
+The Collector lists only `pre_registered_genesis`. After an administrator registers `chain-pdp-001-u`, the same bytes are accepted with `201`.
+
+### A.10 Storage unavailable
 
 ```http
 HTTP/1.1 503 Service Unavailable
@@ -1525,6 +1617,10 @@ components:
         equivocation_flag: {type: boolean}
         late_flag: {type: boolean}
         unattributed_flag: {type: boolean}
+        chain_admission:
+          type: string
+          enum: [pre_registered_genesis, first_observed_genesis, linked_restart_genesis]
+          description: OPTIONAL. How the record's producer chain was admitted (specification section 7.4.1).
         receipt_sequence:
           type: integer
           description: OPTIONAL. Position in a Collector-internal receipt chain, if one is exposed.
@@ -1582,6 +1678,7 @@ components:
         - PRODUCER_IDENTITY_MISMATCH
         - SIGNATURE_MALFORMED
         - UNSUPPORTED_ALGORITHM
+        - CHAIN_NOT_REGISTERED
         - KEY_UNKNOWN
         - KEY_NOT_VALID
         - EVENT_KIND_NOT_AUTHORIZED
@@ -1674,6 +1771,10 @@ components:
         producer_chain_registration_modes_supported:
           type: array
           minItems: 1
+          description: |
+            Must contain first_observed_genesis or pre_registered_genesis. If first_observed_genesis is listed,
+            records of unregistered chains are admitted. If only pre_registered_genesis is listed, they are
+            rejected with CHAIN_NOT_REGISTERED (specification section 7.4.1).
           items:
             type: string
             enum: [first_observed_genesis, pre_registered_genesis, linked_restart_genesis]
@@ -1733,7 +1834,7 @@ V-06 has the same digest as V-01.
 
 ### C.4 Vectors
 
-Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that use the vector.
+Preconditions use the fixture in §15.2. Where the expected result depends on the registration-mode variant, it is given for M1, M2, and M3 (§15.2); an unqualified result holds for all of them. "Used by" lists the tests in §15 that use the vector.
 
 #### V-01
 
@@ -1820,11 +1921,11 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 
 #### V-04
 
-- **Purpose:** Valid record whose `issuer` value contains non-ASCII characters (`é` and U+1F512, a surrogate pair in UTF-16). Chain `chain-pdp-001-u`.
+- **Purpose:** Valid record whose `issuer` value contains non-ASCII characters (`é` and U+1F512, a surrogate pair in UTF-16). Genesis of the unregistered chain `chain-pdp-001-u`.
 - **Precondition:** any
 - **Submitter:** `c-pdp`
-- **Expected:** `201`. The delivered JCS form must equal the source (FW-4).
-- **Used by:** F-01
+- **Expected:** M1, M3: `201`. M2: `400 CHAIN_NOT_REGISTERED`. The delivered canonical form must equal the source (FW-4).
+- **Used by:** F-01, G-01, G-03, G-06
 
 ```json
 {"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b2a-72e6-93ad-06e5d9c2b3ad","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org/café/🔒","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-u","sequence_number":1,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"signature":"IK-jMuQaJKkbYLbrrPxPUm8Oc9zZtaAx10PNzSvVr-YOK_8_nHYrzA5rjJIAaaizJcjkUBvCZ4zBDUB5xpx0Bw"}
@@ -1835,8 +1936,8 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Valid record that carries a signed top-level `evidence_domain_id: "D2"`. Chain `chain-pdp-001-d`.
 - **Precondition:** any
 - **Submitter:** `c-pdp` (bound to `D1`)
-- **Expected:** `201`. Held in `D1`. The body member is ignored for partitioning and preserved.
-- **Used by:** C-26
+- **Expected:** M1, M3: `201`, held in `D1`; the body member is ignored for partitioning and preserved. M2: `400 CHAIN_NOT_REGISTERED` (chain `chain-pdp-001-d` unregistered) until registered.
+- **Used by:** C-26, G-05
 
 ```json
 {"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b2b-73f7-84be-17f6ead3c4be","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-d","sequence_number":1,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"evidence_domain_id":"D2","signature":"ie6m4ml8UN9b4WfMOI0_e4g0mU0V0GlsuPR3O4DmMr87GLBfRMFXd95F2WROsVC6R7NLQD7aquHlz5Xg2AieBw"}
@@ -2007,6 +2108,30 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 
 ```text
 {"record_id":"0191f3a0-7b28-70c4-91eb-e4c3b7a091eb","kid":"key-2026-01","parent_record_ids":[],"producer":"pdp-fleet-1","producer_chain":{"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","producer_chain_id":"chain-pdp-001-a","producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","sequence_number":1},"record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","signature":"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","outcome":"ALLOW","resource_type":"Acme::Payment"},"tokens":[{"issuer":"https://accounts.example.org","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e","token_type":"access_token"}]},"event_kind":"AUTHORIZATION_DECISION","execution_authority":"payments-gateway","policy":{"bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928","policy_language":"cedar","policy_language_version":"4.4.0","policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3"},"runtime":{"pdp_id":"pdp-001"},"signed_at":1781138542,"subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"trace_execution_id":"exec-123"}}
+```
+
+#### V-23
+
+- **Purpose:** Chain `chain-pdp-001-a`, `sequence_number` 2, but `prev_record_hash` is the genesis sentinel. Correctly signed.
+- **Precondition:** empty store
+- **Submitter:** `c-pdp`
+- **Expected:** `201`, `chain_link_failure_flag` true and `coverage_gap_flag` true.
+- **Used by:** G-08
+
+```json
+{"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b2c-74a8-95cf-28a7fbe4d5cf","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-a","sequence_number":2,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"signature":"ovtdvERIBlDQtiP0goIzMQ_5Sp86hz1w-RKnj6dUO917w4N2_hfNzyTtRO48yb98K4HP08KSDQP-Sbz6xvXGBw"}
+```
+
+#### V-24
+
+- **Purpose:** Chain `chain-pdp-001-x` (never registered), `sequence_number` 3, `prev_record_hash` `sha256:` + 64 `b`. Correctly signed.
+- **Precondition:** empty store
+- **Submitter:** `c-pdp`
+- **Expected:** M1, M3: `201`, `coverage_gap_flag` true. M2: `400 CHAIN_NOT_REGISTERED`.
+- **Used by:** G-02, G-03
+
+```json
+{"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b2d-75b9-86d0-39b80cf5e6d0","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-x","sequence_number":3,"prev_record_hash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"parent_record_ids":[],"signature":"DbCk-MzMZGTau2rwmFxczgh7jIwFDL5w0aFaCsiNxLnZNpveKTa1JiqGMNfFo_VWNWn5TVgUVCX2TEnWnpGOCQ"}
 ```
 
 #### V-20

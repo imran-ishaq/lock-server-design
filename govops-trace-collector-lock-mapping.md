@@ -41,6 +41,7 @@ Section references of the form `§n` without a document name refer to the standa
 | 18 | Retrieval ambiguity status | `design.md`: `300`, or `409` when `Accept` demands one body. | Retrieval is out of scope for the standard. Note for a future retrieval specification. |
 | 19 | Receipt-chain details | The receipt profile differs between documents (seven members in the MVP, an extra `receipt_profile` in the GovOps profile and `jans-trace-core`). | Not standardized. The receipt chain is a Collector-internal detail (§1.2). |
 | 20 | Where the cryptographic suite lives | MVP §6 and `jans-trace-core` §6 fix Ed25519, JCS and SHA-256 for Lock, and defer algorithm agility. `govops-trace-profile.md` §1 fixes Ed25519 for the GovOps MVP. The suite is therefore specified in three places and tied to Lock. | The standard defers all of it to the record profile and advertises it per profile (§5.3, §11.2.1). A future profile (for example hardware-backed ECDSA) needs no new API version. |
+| 21 | Chain admission, integrity and completeness | MVP §8 lets an already-registered key open a chain by submitting its first record (first sight) and treats pre-registration as a stronger option, but says nothing about a Collector that requires registration. `design.md` Component 3 offers pre-registration and first-sight anchoring and calls the resulting kind `genesis_kind`, a classification. The same document also says a genesis for an "unregistered, unanchored" chain "does not confer chain-start status", which conflicts with first-sight anchoring. For a sentinel on a non-genesis record, the Authenticated Chain Genesis text says both "rejected" and "fails `predecessor_linked`" (a flagged break). MVP §8 and §12 accept and flag gaps and link failures. | Three separate concerns (§7.4). Admission is the only chain-related rejection, decided by the registration modes: first-sight anchoring admits an unregistered chain, a pre-registered-only Collector rejects it with `CHAIN_NOT_REGISTERED`. Integrity and completeness findings are flags and never rejections. A sentinel on a non-genesis position is flagged as `chain_link_failure_flag`. |
 
 ## 3. Mapping by section
 
@@ -65,7 +66,11 @@ Status values: **Conforms** (design already satisfies the requirement), **Change
 | §6.2 | `201` for first durable acceptance, `200` for replay | MVP §11.1 and `design.md` Component 1 return `202` for both. | Change | Return `201` on first acceptance and `200` on replay; distinguish them with `idempotent_replay`. Acknowledge only after the durable commit (see §7.2 row). |
 | §6.3 | Receipt contents | MVP §11.1 lacks `received_at` and `receipt_id`. | Change | Add `received_at` (already stored, MVP §9). Add `receipt_id` (decimal string of `receipt_sequence`). Keep `receipt_sequence` as an extension. Exclude `current_settlement` from the MVP. |
 | §7.2 | Durable commit before acknowledgement | `PENDING/COMMITTED/VOID` receipt protocol (context notes). | Verify | Prove that a record is acknowledged only after `COMMITTED`, that `PENDING` and `VOID` entries are invisible to retrieval and replay, and that tests C-23 and C-33 pass. |
-| §7.4 | Flags | MVP §8, §10. | Conforms | Snapshot the flags at acceptance and return the snapshot on replay (inconsistency 11). |
+| §7.4 | Admission, integrity, completeness | MVP §8, §10, §12. | Conforms with clarifications | Snapshot the flags at acceptance and return the snapshot on replay (inconsistency 11). Separate the three concerns in MVP §8. |
+| §7.4.1 | Admission by registration mode | MVP §8: a registered key opens a chain at first sight (`first_observed_genesis`); pre-registration is optional and stronger. `design.md` Component 3 supports both mechanisms. | Conforms | Lock is variant M3 (both modes): unregistered chains are admitted, registered chains are classified as pre-registered. State in MVP §8 that Lock admits unregistered chains from an authorized key. A registered-only policy (and `CHAIN_NOT_REGISTERED`) is not required of Lock. |
+| §7.4.1 | `chain_admission` in the receipt | `genesis_kind` is Lock-assigned and stored (`design.md` Authenticated Chain Genesis). | Add | Return `genesis_kind` as `chain_admission`. For a first-observed chain whose genesis has not arrived, return `first_observed_genesis`. |
+| §7.4.2 | Sentinel on a non-genesis position, or a non-sentinel at position 1 | `design.md` (Record structure table) says the record is "rejected"; the Authenticated Chain Genesis bullets say it "fails `predecessor_linked`". | Change | Accept and set `chain_link_failure_flag` regardless of whether a predecessor is held. Fix the "rejected" wording in `design.md`. |
+| §7.4.3 | Missing predecessor | MVP §8: accept, `coverage_gap_flag`. `design.md`: coverage gap at an unanchored origin. | Conforms | None. |
 | §7.5 | Correlation context | MVP rejects missing context. | Conforms (MVP) | Publish `execution_correlation_required: true`. The full design later sets `false` and adds `unattributed_flag`. |
 | §8.1 | Array body, one producer per batch | MVP §11.2. | Conforms | Return `BATCH_MIXED_PRODUCERS`. Publish `bulk_mixed_producers_supported: false`. |
 | §8.2 | Independent per-record processing, array-order identity decisions | MVP §11.2. | Conforms | Add the in-array duplicate rule `[R, R']`. |
@@ -90,6 +95,7 @@ Status values: **Conforms** (design already satisfies the requirement), **Change
 | `MISSING_EXECUTION_CONTEXT` | MVP §12 "Missing required execution scope" | n/a |
 | `PRODUCER_IDENTITY_MISMATCH` | MVP §12 (`producer` differs from `producer_chain.producer_id`) | `PRODUCER_MISMATCH` |
 | `SIGNATURE_MALFORMED` | n/a | `INVALID_SIGNATURE_ENCODING`, `MISSING_SIGNATURE` |
+| `CHAIN_NOT_REGISTERED` | n/a. Lock admits unregistered chains from an authorized key. Needed only if a registered-only policy is added. | n/a |
 | `KEY_UNKNOWN` | "Unknown or untrusted producer" | `KID_MISMATCH` |
 | `KEY_NOT_VALID` | MVP §6 validity window and revocation | n/a (registry check) |
 | `EVENT_KIND_NOT_AUTHORIZED` | MVP §6, §12 (`authorized_event_kinds`) | n/a (registry check) |
@@ -113,7 +119,7 @@ Status values: **Conforms** (design already satisfies the requirement), **Change
 | `authorization_servers`, `ingestion_scope` | Lock's trusted OAuth issuers; `https://jans.io/oauth/lock/trace.write`. |
 | `max_record_bytes`, `max_batch_bytes`, `max_batch_records`, `max_nesting_depth` | New Lock configuration properties, bounded by the `jans-trace-core` limits (§11 of that document). |
 | `execution_correlation_required` | `true` for the MVP. |
-| `producer_chain_registration_modes_supported` | `first_observed_genesis`, `pre_registered_genesis` (MVP §8). |
+| `producer_chain_registration_modes_supported` | `first_observed_genesis`, `pre_registered_genesis` (MVP §8). Add `linked_restart_genesis` only when Lock validates the signed `chain_link` (MVP §8 defers that validation). With both modes listed, unregistered chains are admitted (§7.4.1). |
 | `acceptance_durability` | Per deployment (`replicated_durable` only if the persistence layer replicates before commit). |
 
 ## 6. Required implementation changes
@@ -129,7 +135,8 @@ Ordered by dependency.
 7. **Profiles.** Accept both profile tags and publish each as a `trace_profiles` entry with its suite. Key the cryptographic suite by `trace.eat_profile` inside `jans-trace-core` so later profiles can add algorithms without an API change.
 8. **Discovery.** Implement `/.well-known/govops-trace-configuration` (§11). Update Cedarling's endpoint discovery to use it, and correct the `lock-master-configuration` reference.
 9. **Authorization.** Add the Cedarling policies for the two TRACE endpoints and the forwarder-to-producer binding.
-10. **Conformance.** Run the standard's test suite (§15, Appendix C) in Lock's CI. Provide the `(hook)` facilities: fault injection at the commit point, record-store inspection, key revocation.
+10. **Chain admission.** State Lock's admission policy in MVP §8 and `design.md` Component 3 (open admission for an authorized key, pre-registration as the stronger classification). Flag, do not reject, a sentinel on a non-genesis position. Return `chain_admission`. Optionally add a registered-only policy that returns `CHAIN_NOT_REGISTERED`.
+11. **Conformance.** Run the standard's test suite (§15, Appendix C) in Lock's CI. Provide the `(hook)` facilities: fault injection at the commit point, record-store inspection, key revocation.
 
 ## 7. Updates to repository documents
 
@@ -146,4 +153,5 @@ Ordered by dependency.
 - Should Lock keep `tag:jans.io,2026:trace-v1` indefinitely, or deprecate it after producers migrate?
 - Does the existing Lock client configuration support binding a client to a set of permitted producers (§4.5), or does that need a new configuration entity?
 - Can `jans-orm` provide the `replicated_durable` guarantee on every supported backend, or should Lock omit `acceptance_durability` by default?
+- Does any Lock deployment need a registered-only chain policy (variant M2)? If not, `CHAIN_NOT_REGISTERED` stays unused and the corresponding tests are marked not applicable.
 - Should retrieval receive its own interface specification, including the `300` versus `409` ambiguity response?
