@@ -1,6 +1,6 @@
 # Gluu Ledger Product Requirements Document
 
-Version 0.1 • Proposed product scope • November 1 2026
+Version 0.2 • Proposed product scope • November 1 2026
 
 Audience: Gluu product, engineering, security, and go to market teams
 
@@ -73,17 +73,17 @@ Priority notation: P0 is required for the proposed first commercial release; P1 
 
 ### Evidence collection and integrity
 
-**EV01 P0 — Authenticated ingestion.** Provide versioned single and bulk submission APIs protected by TLS and OAuth. Derive the evidence domain from authenticated client configuration before producer-key resolution or content routing. Acceptance: an attacker cannot select another domain through body fields, identifiers, or correlation edges.
+**EV01 P0 — Authenticated ingestion.** Provide the single and bulk submission APIs defined by the GovOps TRACE Collector API (`govops-trace-collector-api.md`), protected by TLS and OAuth, and publish the Collector metadata document at `/.well-known/govops-trace-configuration`. Identify the submitter as `(issuer, client_id)` from validated token claims, and derive the evidence domain from that identity's configuration before producer-key resolution or content routing. Acceptance: an attacker cannot select another domain through body fields, identifiers, or correlation edges, and a `client_id` issued by a different trusted issuer does not inherit another client's domain or producer permissions.
 
-**EV02 P0 — Producer claim authorization.** Manage producer keys, permitted event kinds, measurement points, validity, rotation, and revocation through a separate administrative permission. Discovery of a public key and possession of that key do not authorize a claim. Acceptance: a valid PDP key cannot submit an authorized FIDO or PEP assertion merely by changing the event kind.
+**EV02 P0 — Producer claim authorization.** Manage producer keys, permitted event kinds, measurement points, validity, rotation, and revocation through a separate administrative permission. Key validity is evaluated at the Collector's clock when it accepts a record, never from the producer's `signed_at`. Discovery of a public key and possession of that key do not authorize a claim. Acceptance: a valid PDP key cannot submit an authorized FIDO or PEP assertion merely by changing the event kind.
 
 **EV03 P0 — Immutable assertions.** Preserve the submitted assertion and use the declared canonicalization for verification and digest computation. Store all Ledger-derived values separately. Acceptance: later enrichment, assessment, export, or key rotation does not change the original assertion or its content digest.
 
-**EV04 P0 — Atomic and idempotent acceptance.** Commit the assertion, receipt, and required indexes atomically before acknowledging durable acceptance. Replaying identical content returns the original receipt; identity reuse with different content returns a conflict. Bulk results are per record; mixed-producer batches are rejected at the envelope level under the current contract.
+**EV04 P0 — Atomic and idempotent acceptance.** Commit the assertion, receipt, and required indexes atomically before acknowledging durable acceptance. A first acceptance returns `201` and an identical replay returns `200` with the original receipt, including its flags as of original acceptance. Identity reuse with different content returns `409`. A replay is not rejected because a key, profile or schema rule changed after acceptance, and the replay window is published as `idempotency_retention_seconds`. Bulk returns `200` with per-record results; mixed-producer batches are rejected at the envelope level unless the Collector advertises support. Errors use the standard's Problem Details codes, and storage outages are retryable `503`s.
 
-**EV05 P0 — Visible integrity findings.** Detect producer-chain gaps, mismatched links, equivocation, and late arrival. Support out-of-order records without manufacturing global event order. Acceptance: a delayed predecessor can resolve a derived gap while prior assessments and signed assertions remain inspectable.
+**EV05 P0 — Visible integrity findings.** Separate chain admission from chain integrity and completeness. Admission is the only chain-related rejection and follows the published registration mode. Detect producer-chain gaps, mismatched links, sentinel misuse, equivocation, and late arrival as flags, never as rejections. Support out-of-order records without manufacturing global event order. Acceptance: a delayed predecessor can resolve a derived gap while prior assessments and signed assertions remain inspectable.
 
-**EV06 P0 — Durable delivery integration.** Provide a supported emitter with bounded queues, retry/backoff, queue-age telemetry, and a persistent outbox option for the server-side first-party integrations. Declare crash loss and restart behavior. This extends the source MVP, which defers producer durability. Acceptance: a tested process crash and collector outage produce either successful replay or explicit loss/coverage disclosure; neither can silently appear complete.
+**EV06 P0 — Durable delivery integration.** Provide a supported emitter with bounded queues, retry that follows the standard (same bytes, jittered exponential backoff, `Retry-After`, no unchanged retry of a non-retryable rejection), queue-age telemetry, and a persistent outbox option for the server-side first-party integrations. Declare crash loss and restart behavior. This extends the source MVP, which defers producer durability. Acceptance: a tested process crash and collector outage produce either successful replay or explicit loss/coverage disclosure; neither can silently appear complete.
 
 ### Cedarling and enforcement evidence
 
@@ -174,7 +174,7 @@ The following are proposed launch targets to validate in a named reference envir
 | Availability | Proposed managed-service objective of 99.9 percent monthly API availability if a managed offering is launched; self-managed deployments receive a tested HA reference architecture |
 | Recovery | Proposed DR target RPO at or below 5 minutes and RTO at or below 4 hours for regional disaster; distinguish this from acknowledged-write durability within the surviving storage topology |
 | Isolation | Zero cross-domain disclosure in authorization, retrieval, traversal, exports, caches, and enrichment conformance tests |
-| Security limits | Bound body size, batch count, nesting, strings, arrays, query cost, and traversal depth before expensive processing; make throttling and truncation explicit |
+| Security limits | Bound body size, batch count, nesting, strings, arrays, query cost, and traversal depth before expensive processing; publish the ingestion limits in the metadata document (at least the profile minimums) and return `413` for oversize bodies; make throttling and truncation explicit |
 | Compatibility | Existing accepted assertions remain byte-verifiable across upgrades; profile and schema migrations are versioned and reversible where applicable |
 
 At least one supported self-managed deployment is required at launch. Managed hosting is a packaging decision pending demand and operational readiness. Both modes need encryption at rest, documented key custody, backup/restore procedures, health metrics, capacity alerts, and support diagnostics that exclude secrets.
@@ -187,7 +187,7 @@ Administrative and evidence-access auditing must avoid recursive TRACE generatio
 
 | Milestone | Scope | Exit gate |
 |---|---|---|
-| Foundation | Shared crypto core, Lock ingestion, receipt chain, Cedarling/PEP evidence, integrity flags | Cross-language vectors, replay/conflict tests, atomicity, isolation, and baseline load tests pass |
+| Foundation | Shared crypto core, Lock ingestion, receipt chain, Cedarling/PEP evidence, integrity flags | Cross-language vectors, replay/conflict tests, atomicity, isolation, and baseline load tests pass. The Collector passes the standard's conformance suite (`conformance/`), with every unverified test reported |
 | First commercial release | All P0 requirements, including capability resolution, authentication/FIDO correlation, settlement, completeness, UI, supported hardware path, and delivery resilience | End-to-end customer scenarios and supported hardware/provider matrix validated; claims match available assurance |
 | Independent assurance release | P1 delegation, authority lifecycle, offline packets/verifier, external anchoring, richer enrichment | A verifier outside the running service reproduces scoped results and reports missing dependencies correctly |
 | Optional expansion | APP process binding, broader attestation/provider matrix, advanced GovOps metrics and GRC mappings | Separate requirements, compatibility review, and conformance tests approved |
@@ -202,8 +202,8 @@ The first commercial release is deliberately broader than Phase 1 of the supplie
 4. **Borrowed attestation.** Runtime B submits evidence citing runtime A's appraisal. Ledger reports invalid or indeterminate binding according to available evidence and grants no instance-assurance uplift.
 5. **Shared fleet key.** Two pods share a registered producer key. Both can submit authorized evidence, but the key alone cannot establish unique pod identity. Missing binding is visible in the execution view.
 6. **Pre-session FIDO evidence.** A registration or discoverable-credential flow precedes session/execution creation. The agreed schema preserves its authentic identifier and later links it with provenance; no synthetic session or execution is created merely to satisfy ingestion.
-7. **Outage and replay.** The collector is unavailable during load. Outboxes retain the supported backlog; replay produces one receipt per record and explicit delay/gap information. Overflow or process loss is disclosed.
-8. **Compromised key.** A key is revoked after earlier accepted records. Historical admission remains visible. A current reappraisal reports compromise risk; untrusted producer timestamps cannot establish pre-compromise creation. Later submissions follow the pinned revocation policy.
+7. **Outage and replay.** The collector is unavailable during load. Outboxes retain the supported backlog; replay produces one receipt per record, returns `200` for records already accepted, and gives explicit delay/gap information. A backlog held longer than `idempotency_retention_seconds` is reported, because its replays would be new acceptances. Overflow or process loss is disclosed.
+8. **Compromised key.** A key is revoked after earlier accepted records. Historical admission remains visible, and a replay of an accepted record still succeeds. A current reappraisal reports compromise risk; untrusted producer timestamps cannot establish pre-compromise creation. Later submissions follow the pinned revocation policy.
 9. **Missing target evidence.** Decision and invocation records settle individually, while the execution remains missing expected effect evidence after its observation deadline. Arrival of a valid effect creates a new completeness assessment.
 10. **Domain attack.** A client guesses another domain's record, token, session, or execution ID and tries direct retrieval, traversal, and export. No foreign evidence or existence-sensitive content is disclosed.
 11. **Offline review P1.** A packet verifies with configured trust roots and all required dependencies. Removing a key-authorization statement or anchor proof produces an explicitly reduced verdict, never an unexplained pass.
@@ -232,13 +232,14 @@ These are measures over observed or externally enumerated populations. Estimatin
 |---|---|---|
 | MVP defers capability mapping while GovOps profile requires it | Include resolution in commercial P0; reconcile engineering and standard conformance claims | Product and standards leads |
 | FIDO and early authentication lack execution/session context | Pin scoped pre-session evidence schema and attribution semantics before adapter completion | Identity engineering lead |
-| Ed25519 profile may not match selected hardware capabilities | Test provider/algorithm feasibility before naming supported platforms | Cryptography lead |
+| Ed25519 profile may not match selected hardware capabilities | Test provider/algorithm feasibility before naming supported platforms. The Collector API takes its cryptographic suite from the record profile, so a hardware-backed profile needs no API change | Cryptography lead |
 | Fleet keys undermine unique instance assurance | Offer per-instance enrollment or explicit lower assurance; never infer binding from fleet membership | Platform security lead |
 | Full design conflates actor and producer runtime binding | Split the assessment dimensions and add remote-PDP negative/positive vectors | Architecture lead |
 | Offline authenticity is marketed as producer truth | Keep claim boundaries, independent witness assumptions, and lineage coverage visible | Security and product leads |
 | Current source wording overstates session-to-human authority | Require explicit delegation/action-approval evidence for stronger claims | Identity and authorization leads |
 | Evidence volume exceeds delivery capacity | Benchmark signing, protected-key throughput, storage, indexing, retention, and replay together | Reliability lead |
 | Privacy-sensitive identity and business correlation | Minimize payloads; scope identifiers; control access and retention; specify erasure behavior | Security and privacy owners |
+| Lock differs from the standard on chain admission, status codes, errors and limits | Resolve the open decisions in `govops-trace-collector-lock-mapping.md` (D7, D9 to D13) before claiming Collector conformance | Product and standards leads |
 | Product scope grows into orchestration or GRC | Keep process control and full compliance workflows external; use optional adapters | Product lead |
 
 Pricing, managed-service regions, support tiers, exact launch provider, and commercial licensing boundaries remain open. Estimate cost from accepted bytes, retention, index footprint, signing/appraisal throughput, and assessment workload before selecting a charging unit. No prices are proposed in this PRD.
@@ -247,17 +248,17 @@ Pricing, managed-service regions, support tiers, exact launch provider, and comm
 
 APP support is a P2 extension. Bind process authority, Frame version/digest, process instance, step occurrence, and source transactions to existing executions. Preserve APP conformance claims separately from Ledger verification. Add recovery, oversight, and independent-trace reconciliation through an optional profile. The APP orchestrator retains process control and PxER assembly. Business-entity inference remains an external service initially.
 
-GovOps TRACE should remain vendor-neutral and PDP-neutral, with normative semantics owned by the standard rather than the Lock implementation. Product-specific views and service operations do not automatically become standard requirements. Publish explicit conformance scopes for producer, collector, receipt, assessment, hardware-binding, FIDO-binding, and optional APP behavior.
+GovOps TRACE should remain vendor-neutral and PDP-neutral, with normative semantics owned by the standard rather than the Lock implementation. Product-specific views and service operations do not automatically become standard requirements. The Collector interface is now specified by `govops-trace-collector-api.md`, with classes Collector, Collector-Bulk, Producer and Forwarder, a requirement register, and machine-readable conformance tests. Ledger claims conformance by class, profile and registration-mode variant, and `govops-trace-collector-lock-mapping.md` lists where Lock differs. Publish explicit conformance scopes for the remaining areas: receipt, assessment, hardware-binding, FIDO-binding, and optional APP behavior.
 
 Pin implemented draft/profile versions and test vectors. Do not claim broad conformance to evolving SCITT, WIMSE, or APP drafts simply because their concepts appear in the design. Any additional signature algorithm or pre-session event schema requires explicit profile negotiation and compatibility tests.
 
 ## 13 Design review and source traceability
 
-Sources are the user-supplied repository export `nynymike-lock-server-design-8a5edab282632443.txt`, the previously supplied full Lock design `design(3).md`, and `govops-trace-profile(6).md`. APP scope also draws on the previously supplied APP repository export and the preceding review. The new repository export lists the full `design.md` as a dependency but does not include it; the earlier supplied full design supplies that context. Source references below identify document names and headings within the supplied exports, not verified implementation state.
+Sources include the GovOps TRACE Collector API (`govops-trace-collector-api.md`), its conformance artifacts, and the Lock mapping document, together with the user-supplied repository export `nynymike-lock-server-design-8a5edab282632443.txt`, the previously supplied full Lock design `design(3).md`, and `govops-trace-profile(6).md`. APP scope also draws on the previously supplied APP repository export and the preceding review. The new repository export lists the full `design.md` as a dependency but does not include it; the earlier supplied full design supplies that context. Source references below identify document names and headings within the supplied exports, not verified implementation state.
 
 | Product area | Source basis | Principal PRD addition or correction |
 |---|---|---|
-| Ingestion and integrity | Lock Server TRACE MVP §§4–15; jans-trace-core MVP §§6–13 | Commercial delivery resilience and operating targets |
+| Ingestion and integrity | Lock Server TRACE MVP §§4–15; jans-trace-core MVP §§6–13; GovOps TRACE Collector API; Lock mapping | Commercial delivery resilience and operating targets; conformance to the Collector API |
 | Cedarling | Cedarling full design, Correlation, Operation binding, Deployment, Volume | Accurate diagnostics, coverage disclosure, hardware-aware fleet limits |
 | Human authentication | Auth Server full design, Correlation, Bootstrap, Open questions | Explicit ceremony/authority linkage and pre-session handling |
 | FIDO | FIDO full design, Event payload, Optional attestation, Open questions | Pin assurance fields, qualify hardware claims, preserve sessionless events |
