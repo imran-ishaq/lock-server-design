@@ -116,7 +116,7 @@ Status values: **Conforms**, **Change** (Lock must change; see section 2), **Add
 | `SCHEMA_INVALID` | `invalid_assertion` | 400 | `INVALID_ASSERTION_SHAPE` |
 | `UNSUPPORTED_PROFILE` | `unsupported_profile` | 400 | n/a |
 | `MISSING_EXECUTION_CONTEXT` | `invalid_assertion` (reason names the missing pair) | 400 | n/a |
-| `PRODUCER_IDENTITY_MISMATCH` | `producer_mismatch` | 400 | `PRODUCER_MISMATCH` |
+| `PRODUCER_IDENTITY_MISMATCH` | `producer_mismatch` | 400 | `INVALID_ASSERTION_SHAPE` (the core's `PRODUCER_MISMATCH` is a different check, signed producer against the caller's expected producer) |
 | `SIGNATURE_MALFORMED` | `invalid_assertion` | 400 | `INVALID_SIGNATURE_ENCODING`, `MISSING_SIGNATURE` |
 | `CHAIN_NOT_REGISTERED` | `chain_not_registered` | 400 | n/a |
 | `KEY_UNKNOWN` | `unknown_producer_key` | 400 | `KID_MISMATCH` |

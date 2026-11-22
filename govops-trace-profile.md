@@ -365,7 +365,7 @@ The Collector API does not define any cryptographic algorithm. It requires the p
 | Signature algorithm and key | Ed25519 (RFC 8032). A registered key is a JWK of type `OKP`, curve `Ed25519` (RFC 8037). There is no algorithm agility in this profile. |
 | Signature input | The RFC 8785 (JCS) canonical form of the complete top-level record with only the top-level `signature` member omitted. Every other member, including unknown members and `kid`, is signed. |
 | Signature encoding | Unpadded base64url (RFC 4648 §5) of the 64-byte signature. Padding, the standard base64 alphabet, a wrong length, and a non-string value are invalid. |
-| Canonicalization | RFC 8785 (JCS). The input is strict JSON: UTF-8, no duplicate member name at any depth, no `NaN` or infinity, numbers within the I-JSON range (RFC 7493), and a top-level object. |
+| Canonicalization | RFC 8785 (JCS). The input is strict JSON: UTF-8, no duplicate member name at any depth, no `NaN` or infinity, numbers within the I-JSON range (RFC 7493), and every number whose magnitude exceeds 2^53−1 is rejected however it is written (for example `9007199254740993.0` and `1e30`), because JCS serializes every number as an IEEE-754 double, and a top-level object. |
 | Content digest | `sha256:` followed by the lowercase hexadecimal SHA-256 of the JCS form of the **complete** record, including `signature`. There is no other textual form. It is computed by the collector and is never a record member. |
 | Genesis sentinel | `sha256:` followed by 64 zeros. It is the `prev_record_hash` of the record at `sequence_number` 1. |
 | Identifier forms | `record_id`: lowercase UUID or uppercase ULID (§1). |

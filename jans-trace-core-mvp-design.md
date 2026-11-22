@@ -71,7 +71,7 @@ Independent verifier
 
 ### 4.1 Lock remains responsible for evidence ingestion
 
-Lock derives `evidence_domain_id`, validates TRACE API access, resolves `(evidence_domain_id, producer_id, kid)`, enforces event schemas, and stores the accepted record. The library must never accept a producer-supplied evidence domain as authoritative.
+Lock derives `evidence_domain_id`, validates TRACE API access, resolves `(evidence_domain_id, producer_id, kid)`, enforces event schemas, and stores the accepted record. The library must never accept a producer-supplied evidence domain as authoritative. The core has no clock: Lock evaluates a key's validity window and revocation at its own acceptance time, never at the record's `signed_at` (GovOps TRACE Collector API §4.5.1), and passes the resolved key to the core. Lock also checks for a replay before it checks key validity (Collector API §4.6, §9.2), so the core's `verify` is never the step that rejects a replay.
 
 ### 4.2 Cedarling remains the PDP
 
@@ -121,7 +121,7 @@ The MVP profile fixes the following algorithms:
 | Binary-to-text signature encoding | Unpadded base64url |
 | Digest text encoding | `sha256:` followed by 64 lowercase hexadecimal characters |
 
-Algorithm agility is deliberately deferred. Allowing record-selected algorithms in the MVP would add downgrade and interoperability risks. A future profile can introduce new algorithms with a new profile identifier and explicit verifier policy. (The TRACE standard — v0.2, `research/trace-spec.txt` — permits Ed25519, ES256, and ES384; the MVP's **Ed25519-only** choice is a deliberate subset of that set, not a divergence from it, and the broader set is one of the additions a future profile may enable.)
+These algorithms are the suite that `govops-trace-profile.md` §15 defines for `tag:govops.owasp.org,2026:trace-v1`, and the Jans profile `tag:jans.io,2026:trace-v1` uses the same suite, so the crate's outputs are identical for either tag. The Collector API requires the suite to come from the profile named in `trace.eat_profile` (§5.3), so the crate selects it by that profile identifier from a fixed set of supported profiles, and never from an algorithm named in the record, a header, or transport metadata. Algorithm agility is deliberately deferred. Allowing record-selected algorithms in the MVP would add downgrade and interoperability risks. A future profile can introduce new algorithms with a new profile identifier and explicit verifier policy. (The TRACE standard — v0.2, `research/trace-spec.txt` — permits Ed25519, ES256, and ES384; the MVP's **Ed25519-only** choice is a deliberate subset of that set, not a divergence from it, and the broader set is one of the additions a future profile may enable.)
 
 ### 6.2 Strict JSON requirements
 
@@ -137,6 +137,10 @@ Cryptographic processing must reject JSON that cannot be represented unambiguous
 - a top-level `signature` or `kid` with an invalid representation.
 
 Duplicate-key detection must be implemented explicitly. A normal JSON parser that silently keeps the first or last duplicate is not acceptable for signed input.
+
+For a bulk body, the strict parse covers the whole document before any element is processed (Collector API §5.2, §8). A syntax error, a duplicate member name at any depth, or excessive nesting in any element makes `parse_batch` fail for the whole body, and no element is processed. After a successful parse, an element that is valid JSON but not an object fails only that element. A body that is valid JSON but not an array is `INVALID_BATCH`.
+
+When it reads `identity`, the core also checks the two identity rules that decide record identity: `record_id` is a lowercase UUID or an uppercase ULID, compared as an exact string (profile §1), and `producer` equals `producer_chain.producer_id` byte for byte (Collector API PRF-004). Either failure is `INVALID_ASSERTION_SHAPE`. `PRODUCER_MISMATCH` is a different check: the signed producer against the producer the caller expects for the resolved key.
 
 The core library validates only cryptographically relevant common structure. Lock separately validates the complete TRACE schema and the `trace.event_kind` discriminated union.
 
@@ -223,6 +227,8 @@ receipt_hash       = "sha256:" + lowercase_hex(receipt_hash_bytes)
 ```
 
 The receipt hash itself is not included in its own input.
+
+The receipt chain is internal to Lock. The Collector API requires only `receipt_id` and `received_at` in an acceptance response and lists `receipt_sequence` as an optional extension (§6.3). Lock returns the decimal `receipt_sequence` as `receipt_id`. `received_at` is the same value that is hashed here, and a replay returns it unchanged.
 
 ### 7.3 Genesis
 
@@ -325,7 +331,7 @@ Errors have a stable machine-readable code and a non-sensitive description. Sugg
 
 Errors must never include private-key bytes, raw tokens, full confidential assertions, or native backtraces in production responses.
 
-Lock's HTTP API does not return these codes: it maps failures to its own error ids (`Lock-Server-TRACE-MVP-Design.md` §11.1, e.g. `SIGNATURE_INVALID` → `invalid_signature`).
+Lock's HTTP API does not return these codes: it maps failures to its own error ids (`Lock-Server-TRACE-MVP-Design.md` §11.1, e.g. `SIGNATURE_INVALID` → `invalid_signature`). The Collector API defines its own error codes (§10.2). `govops-trace-collector-lock-mapping.md` §4 maps the library codes to them: for example `INVALID_BATCH` is `BATCH_NOT_ARRAY` and `DUPLICATE_MEMBER` raised on a request body is `MALFORMED_JSON`.
 
 ## 11. Input limits
 
@@ -338,11 +344,11 @@ The library accepts limits from the embedding application rather than defining d
 - maximum string bytes; and
 - maximum canonicalized output bytes.
 
-Limits are applied before or during parsing so an attacker cannot force an unbounded allocation before rejection. Lock's API limit must be equal to or smaller than the corresponding library limit.
+Limits are applied before or during parsing so an attacker cannot force an unbounded allocation before rejection. Lock's API limit must be equal to or smaller than the corresponding library limit. The Collector API requires every Collector to support at least 65,536 bytes per record, 1,048,576 bytes per bulk body, 100 records per batch, and depth 16 (§5.8), and the defaults below exceed each of them. The array maximums of `govops-trace-profile.md` §15 are per field (`tokens[]` 32, `decisions[]` 128, and so on). The core does not know the event schema, so Lock's schema validation enforces them and the core's 1024-element bound is only a parser safety limit.
 
 Implemented defaults (`Limits::default()`, generous on purpose; Lock's own defaults are stricter): 256 KiB per assertion, depth 32, 1024 members per object, 1024 elements per array, 64 KiB per string, 512 KiB canonical output, and for bulk bodies 8 MiB and 500 records.
 
-Strict JSON as implemented: duplicate members are rejected at any depth (`DUPLICATE_MEMBER`); a byte-order mark or trailing data is `INVALID_JSON`; every number outside ±(2^53−1), however written (`9007199254740993.0`, `1e30`), is rejected (`NON_CANONICALIZABLE_JSON`), because JCS serializes every number as an IEEE-754 double.
+Strict JSON as implemented (profile §15 states this number rule for the GovOps profile): duplicate members are rejected at any depth (`DUPLICATE_MEMBER`); a byte-order mark or trailing data is `INVALID_JSON`; every number outside ±(2^53−1), however written (`9007199254740993.0`, `1e30`), is rejected (`NON_CANONICALIZABLE_JSON`), because JCS serializes every number as an IEEE-754 double.
 
 ## 12. Dependencies and implementation rules
 
@@ -370,6 +376,8 @@ Rules:
 > **Status:** the RFC 8785 reference vectors and the Java binding's known-answer tests run in CI. The normative TRACE vectors (§13.1), property tests (§13.2), fuzz targets (§13.3), and cross-language CI (§13.4) are not built yet; see `trace-mvp-post-mvp.md`.
 
 ### 13.1 Normative vectors
+
+The Collector API publishes signed Ed25519 vectors for `tag:govops.owasp.org,2026:trace-v1` in `conformance/vectors.json`, produced by an independent reference model. The core's normative vectors include them (or are checked against them), so the crate, the Java binding, and the reference model agree on every canonical form, signature, and `content_digest`.
 
 Every vector includes:
 
@@ -436,7 +444,7 @@ The acceptance criterion is no panic, memory-safety violation, unbounded allocat
 
 CI runs the same vectors through:
 
-1. the native Rust API;
+1. the native Rust API, including the Collector API vectors in `conformance/vectors.json`;
 2. the Java API used by Lock; and
 3. any independent Java implementation retained as a packaging fallback.
 
@@ -474,7 +482,7 @@ TRACE assertion profile: tag:jans.io,2026:trace-v1
 Lock receipt profile:    tag:jans.io,2026:lock-trace-receipt-v1
 ```
 
-The assertion profile `tag:jans.io,2026:trace-v1` is a **distinct Jans/Lock profile** that extends the TRACE standard (tracked at **v0.2**, `research/trace-spec.txt`, profile `tag:agentrust-io.com,2026:trace-v0.2`); it is intentionally a separate profile tag, not the standard's. See `design.md`: Alignment with TRACE v0.2 for the field mapping. This crate is profile-agnostic about *content* — it signs and hashes whatever assertion bytes it is given under the fixed cryptographic profile above — so a change of assertion profile does not change this crate's outputs, which are governed solely by the signature-scope, canonicalization, digest, and receipt rules in §6–§7.
+The assertion profile `tag:jans.io,2026:trace-v1` is a **distinct Jans/Lock profile** that extends the TRACE standard (tracked at **v0.2**, `research/trace-spec.txt`, profile `tag:agentrust-io.com,2026:trace-v0.2`); it is intentionally a separate profile tag, not the standard's. See `design.md`: Alignment with TRACE v0.2 for the field mapping. The vendor-neutral GovOps profile `tag:govops.owasp.org,2026:trace-v1` (`govops-trace-profile.md`) uses the same cryptographic suite (profile §15), and Lock lists both tags in its `trace_profiles` metadata while producers migrate. This crate is profile-agnostic about *content* — it signs and hashes whatever assertion bytes it is given under the fixed cryptographic profile above — so a change of assertion profile does not change this crate's outputs, which are governed solely by the signature-scope, canonicalization, digest, and receipt rules in §6–§7.
 
 ## 16. Delivery phases
 
