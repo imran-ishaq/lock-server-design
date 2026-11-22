@@ -77,7 +77,8 @@ JSON is as defined by RFC 8259. "Strict JSON" is defined in §5.2.
 | **Record** | A producer-signed TRACE assertion: the complete top-level JSON object, including `signature`. |
 | **TRACE record profile** ("profile") | The specification, identified by `trace.eat_profile`, that defines a record's members, event kinds, and cryptographic protection (§5.3). |
 | **Producer** | The component that creates and signs a record. Identified by the signed `producer` member. |
-| **Submitter** | The authenticated OAuth client that sends the HTTP request. It is often, but not always, the producer. |
+| **Submitter** | The authenticated OAuth client that sends the HTTP request, identified by `(issuer, client_id)` (§4.2.2). It is often, but not always, the producer. |
+| **Authorization server** | An OAuth 2.0 server that issues the access tokens the Collector accepts. The Collector trusts a configured set of them. |
 | **Forwarder** | A submitter that relays records signed by other producers (§12). |
 | **Collector** | A server implementing this API. |
 | **Evidence domain** | The Collector's isolation partition for authorization, storage, and identity. Derived by the Collector from the authenticated submitter, never from the record (§4.4). |
@@ -123,14 +124,65 @@ The paths above are canonical for API version `v1`. A Collector MAY be deployed 
 - A Collector MUST support TLS 1.2 or later and SHOULD support TLS 1.3 (RFC 8446). It MUST NOT negotiate SSL 3.0, TLS 1.0, or TLS 1.1.
 - Clients MUST validate the Collector's certificate chain and host name.
 
-### 4.2 OAuth 2.0 access tokens
+### 4.2 OAuth 2.0 access tokens and submitter identity
 
-- A request to an ingestion endpoint MUST carry an OAuth 2.0 access token (RFC 6750 `Authorization: Bearer`, or a sender-constrained scheme such as DPoP, RFC 9449, or mutual-TLS-bound tokens, RFC 8705).
-- Sender-constrained tokens are RECOMMENDED, and are especially RECOMMENDED for forwarders, which hold credentials that can submit for many producers.
-- The Collector MUST validate the token's signature or introspection result, expiry, issuer, and audience before processing the body. Accepted issuers are those listed in the Collector's `authorization_servers` metadata (§11).
-- The Collector SHOULD require that the token's audience identifies the Collector (RFC 8707).
-- Access tokens MUST NOT be accepted in a URI query parameter.
-- A missing, expired, malformed, or otherwise invalid token yields `401` with `WWW-Authenticate` (RFC 6750 §3) and problem code `UNAUTHENTICATED`.
+#### 4.2.1 Presenting tokens and minimum mechanisms
+
+A request to an ingestion endpoint MUST carry an OAuth 2.0 access token. Tokens MUST NOT be accepted in a URI query parameter or in the request body.
+
+**A conforming Collector MUST support, at a minimum:**
+
+1. Bearer tokens in the `Authorization` request header (RFC 6750 §2.1).
+2. Access tokens issued to a client acting on its own behalf (the client credentials grant, RFC 6749 §4.4), as JWT access tokens (RFC 9068). The Collector validates the signature with the keys of the issuing authorization server (published at the `jwks_uri` in its RFC 8414 metadata), and checks `iss`, `aud` (§4.2.3), `exp`, `nbf` when present, the client identifier claim (§4.2.2), and `scope` (§4.3). The Collector MUST reject a token whose `alg` is `none` or a symmetric algorithm, and MUST NOT fetch keys from a `jku`, `x5u`, or `jwk` header parameter.
+3. Rejection of a sender-constrained token whose proof it cannot verify (§4.2.4). A token that carries a confirmation (`cnf`) claim MUST NOT be accepted as a plain bearer token.
+
+**A Collector MAY also support:** opaque access tokens validated by token introspection (RFC 7662) (and MUST, if it lists an authorization server with `token_format: "introspection"`); DPoP-bound tokens (RFC 9449); and certificate-bound tokens (RFC 8705).
+
+**How the submitter authenticates to the authorization server** (for example `client_secret_basic`, `private_key_jwt`, or mutual TLS) is a matter between the submitter and its authorization server and is outside this API. The Collector sees only the resulting token. For forwarders, which hold credentials that can submit for many producers, asymmetric client authentication (`private_key_jwt`, RFC 7523, or `tls_client_auth`, RFC 8705) is RECOMMENDED over a shared secret.
+
+#### 4.2.2 Submitter identity
+
+A **submitter identity** is the ordered pair **(issuer, client_id)**:
+
+- `issuer` is the identifier of the authorization server that issued the token, and
+- `client_id` is the OAuth client identifier within that authorization server.
+
+A client identifier is unique only within its authorization server. A Collector may trust several authorization servers, so:
+
+1. A submitter identity MUST be scoped to its issuing authorization server. `client_id` alone MUST NOT identify a submitter, bind an evidence domain, or grant any permission.
+2. Two identities are equal only if both components are equal. Each is compared as an exact string (simple string comparison, RFC 3986 §6.2.1), with no normalization and no case folding. A client `c-pdp` at one authorization server is a different submitter from `c-pdp` at another.
+3. A Collector MUST NOT concatenate the pair into one string unless the encoding is unambiguous (for example a JSON array, or length-prefixed components).
+
+**Derivation.** The Collector MUST derive the submitter identity from the validated claims of the access token, or from an authenticated introspection response, according to the documented token profile of the authorization server that issued it. The Collector records that profile for each trusted authorization server and publishes it in its metadata (§11.2, `authorization_servers`).
+
+| Token format | `issuer` | `client_id` |
+|---|---|---|
+| JWT access token (`token_format: "jwt"`) | The validated `iss` claim. It MUST be exactly one of the Collector's configured issuers. | The claim named by the server's `client_id_claim` (default `client_id`, RFC 9068 §2.2). |
+| Opaque token with introspection (`token_format: "introspection"`) | The issuer of the authorization server whose introspection endpoint returned `active: true`. If the response contains `iss`, it MUST equal that issuer. | The response member named by the server's `client_id_claim` (default `client_id`, RFC 7662 §2.2). |
+
+Rules:
+
+- If the client identifier is absent, empty, or not a string, the request is rejected with `401 UNAUTHENTICATED`. The Collector MUST NOT fall back to `sub`, `azp`, a certificate subject, or any other value, unless the server's token profile names that claim as `client_id_claim`.
+- The identity MUST NOT be taken from a request header, query parameter, request body, record content, an unvalidated token, or the subject of a TLS client certificate. (A certificate can bind a token under RFC 8705. It does not supply the identity.)
+- A token's `iss` selects the keys or introspection endpoint of that authorization server and no other. The Collector checks `iss` against its configured issuers before choosing any key. A token validated for one authorization server can never produce an identity with another server's issuer. This prevents issuer mix-up and key confusion.
+- When the token represents a resource owner acting through a client, the identity is still the client's `(issuer, client_id)`. The user's `sub` plays no role in this API.
+- The Collector MAY retain the identity as ingestion metadata outside the signed assertion.
+
+The submitter identity is the only identity this document uses for evidence-domain binding (§4.4) and submitter-to-producer permission (§4.5). Both bindings are configured against `(issuer, client_id)` pairs.
+
+#### 4.2.3 Token validation and failures
+
+- The Collector MUST validate the token before processing the body: signature or introspection result, expiry, `nbf` when present, issuer, and audience.
+- **Audience.** A JWT access token's `aud` MUST contain the Collector's `issuer` identifier from its metadata, which serves as the Collector's resource identifier (RFC 8707, RFC 9728). An introspection response that contains `aud` MUST contain it as well.
+- A missing, expired, malformed, or otherwise invalid token, an issuer that is not configured, an unusable client identifier, or an inactive introspection result yields `401` with `WWW-Authenticate` (RFC 6750 §3) and problem code `UNAUTHENTICATED`.
+- If the Collector cannot obtain the keys or the introspection result it needs and has no valid cached result, it MUST respond `503 COLLECTOR_UNAVAILABLE` (with `Retry-After`) and MUST NOT accept the request. Key sets MAY be cached as HTTP caching permits. An introspection result MUST NOT be cached beyond the token's `exp` or a configured maximum (RECOMMENDED: 5 minutes at most).
+- A Collector SHOULD reject a JWT access token whose lifetime (`exp` minus `iat`) exceeds a configured maximum.
+
+#### 4.2.4 Sender-constrained tokens
+
+- Sender-constrained tokens are RECOMMENDED, and especially for forwarders.
+- If a token carries a confirmation claim (`cnf`, in the JWT or in the introspection response), the Collector MUST verify the corresponding proof (RFC 9449 for `jkt`, RFC 8705 for `x5t#S256`) and MUST reject the request with `401 UNAUTHENTICATED` if it cannot. It MUST NOT treat a constrained token as a bearer token.
+- A Collector that supports either mechanism lists it in `sender_constrained_tokens_supported` (§11.2).
 
 ### 4.3 Scopes
 
@@ -140,8 +192,8 @@ The paths above are canonical for API version `v1`. A Collector MAY be deployed 
 
 ### 4.4 Evidence-domain isolation
 
-- The Collector MUST derive the evidence domain from the authenticated submitter (the OAuth client identity as validated in §4.2) and the Collector's own configuration.
-- A submitter with no evidence-domain binding MUST be rejected with `403` and `EVIDENCE_DOMAIN_NOT_BOUND`. The Collector MUST NOT apply a default domain to an unbound submitter in a multi-domain deployment. (A deployment with exactly one domain MAY treat it as an implicit configured value, but the rules in this section still apply.)
+- The Collector MUST derive the evidence domain from the authenticated submitter identity `(issuer, client_id)` (§4.2.2) and the Collector's own configuration. The binding is configured against the pair, never against `client_id` alone.
+- A submitter identity with no evidence-domain binding MUST be rejected with `403` and `EVIDENCE_DOMAIN_NOT_BOUND`. A client that has the same `client_id` as a bound client, but is issued by a different authorization server, is a different identity and is unbound unless configured. The Collector MUST NOT apply a default domain to an unbound submitter in a multi-domain deployment. (A deployment with exactly one domain MAY treat it as an implicit configured value, but the rules in this section still apply.)
 - The evidence domain MUST NOT be read from the request path, query, headers, or record body. If a record contains a member named `evidence_domain_id` (or an equivalent partition field), the Collector MUST ignore it for every purpose, and SHOULD flag it for operators. The member remains part of the signed assertion and is preserved unchanged.
 - The evidence domain MUST be determined before any producer-key lookup, identity lookup, or content-based routing.
 - Every read and write in the Collector MUST be scoped to that domain. A record identity, key, or receipt in another domain MUST NOT be observable through any response, error detail, timing-dependent behavior the Collector controls, or idempotency result. In particular, a submission in domain D2 MUST NOT conflict with, replay, or reveal an identical record identity in domain D1.
@@ -153,14 +205,14 @@ Two independent checks apply to every record. Neither substitutes for the other.
 
 | | Submission authorization | Producer verification |
 |---|---|---|
-| Question | May this authenticated client send records to this Collector, for this producer? | Did the registered producer sign exactly these bytes, and may that key sign this event kind? |
+| Question | May this authenticated submitter, identified by `(issuer, client_id)`, send records to this Collector, for this producer? | Did the registered producer sign exactly these bytes, and may that key sign this event kind? |
 | Evidence | OAuth token, scope, submitter-to-evidence-domain binding, submitter-to-producer permission | Producer key registry entry, `kid`, signature verified as the record's profile defines |
 | Failure | `401`, `403` | `400` with a key or signature code |
 | Granted by | The Collector's access-control configuration | The producer key registry, provisioned administratively |
 
 Rules:
 
-1. **Submitter-to-producer permission.** The Collector MUST maintain which submitters may submit records for which `producer_id` values. By default a submitter may submit only for the producer it represents. A submitter MAY submit for other producers only if the Collector's configuration explicitly permits that submitter to forward for those producers (§12). A submitter that is not permitted MUST be rejected with `403` and `SUBMITTER_NOT_AUTHORIZED`, before key resolution or signature verification.
+1. **Submitter-to-producer permission.** The Collector MUST maintain which submitter identities `(issuer, client_id)` may submit records for which `producer_id` values. By default a submitter may submit only for the producer it represents. A submitter MAY submit for other producers only if the Collector's configuration explicitly permits that submitter to forward for those producers (§12). A submitter that is not permitted MUST be rejected with `403` and `SUBMITTER_NOT_AUTHORIZED`, before key resolution or signature verification.
 2. **No self-authenticating keys.** The Collector MUST NOT accept a public key from a request. Keys come only from the producer key registry, provisioned by an administrative path separate from the ingestion scope.
 3. **Producer identity comes from the signed record.** The Collector MUST NOT accept a producer identity, `kid`, or evidence domain from an unsigned header, query, or transport attribute in place of the values in the signed assertion.
 4. **Registry authority.** The index `(evidence domain, producer_id, kid)` locates a candidate key. Authority to sign comes from the administrative registration of that key: it exists, is within its validity window and not revoked **at the evaluation time defined in §4.5.1**, is registered for this `producer_id`, and lists the record's `trace.event_kind` as permitted.
@@ -217,7 +269,7 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | # | Step | Failure |
 |---|---|---|
 | 1 | TLS | connection refused |
-| 2 | Authenticate token | `401 UNAUTHENTICATED` |
+| 2 | Authenticate the token and derive the submitter identity `(issuer, client_id)` (§4.2) | `401 UNAUTHENTICATED`; `503 COLLECTOR_UNAVAILABLE` if keys or introspection are unavailable |
 | 3 | Check ingestion scope | `403 INSUFFICIENT_SCOPE` |
 | 4 | Derive evidence domain | `403 EVIDENCE_DOMAIN_NOT_BOUND` |
 | 5 | Check `Content-Type`, `Content-Encoding`, body byte limit (`max_record_bytes` for a single-record request, `max_batch_bytes` for a batch), rate limit | `415`, `413 RECORD_TOO_LARGE` or `413 REQUEST_TOO_LARGE`, `429` |
@@ -757,7 +809,8 @@ Host: collector.example.org
 | `trace_ingestion_endpoint` | string (URL) | REQUIRED | Single-record submission URL. |
 | `trace_bulk_ingestion_endpoint` | string (URL) | CONDITIONAL | Bulk submission URL. Present if and only if bulk is supported. |
 | `trace_profiles` | array of object | REQUIRED | One entry for each supported TRACE record profile, with that profile's cryptographic capabilities. See §11.2.1. |
-| `authorization_servers` | array of string (issuer URLs) | REQUIRED | OAuth 2.0 authorization servers whose tokens the Collector accepts. A client obtains each server's metadata by RFC 8414 or OpenID Connect Discovery at its issuer identifier. This member has the meaning defined for OAuth protected resource metadata in RFC 9728. |
+| `authorization_servers` | array of object | REQUIRED | The OAuth 2.0 authorization servers whose tokens the Collector accepts, each with its token profile (§11.2.2). A client obtains each server's metadata by RFC 8414 or OpenID Connect Discovery at its `issuer`. |
+| `sender_constrained_tokens_supported` | array of string | OPTIONAL | Any of `dpop` (RFC 9449) and `mtls` (RFC 8705). Absent means none (§4.2.4). |
 | `ingestion_scope` | string | REQUIRED | The scope required by both ingestion endpoints. |
 | `scopes_supported` | array of string | OPTIONAL | Other scopes the Collector defines. |
 | `max_record_bytes` | integer | REQUIRED | Maximum decoded bytes in one record (§5.8). |
@@ -770,6 +823,8 @@ Host: collector.example.org
 | `synchronous_integrity_flags` | boolean | OPTIONAL | Default `false`. `true` if every receipt carries `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, and `late_flag` as evaluated at acceptance (§7.4.5). If `false` or absent, receipts omit all four. |
 | `acceptance_durability` | string | OPTIONAL | `local_durable` or `replicated_durable` (§7.2). A Collector that omits it makes no replication claim. |
 | `content_encodings_supported` | array of string | OPTIONAL | For example `["gzip"]`. Absent means none. |
+
+The limits MUST be values that every authorized submitter can rely on. A Collector MAY grant a particular submitter higher limits, but MUST NOT enforce lower ones than it publishes.
 
 #### 11.2.1 Profile entries
 
@@ -791,7 +846,19 @@ Rules:
 - Different profiles MAY list different suites. A record is never verified with another profile's entry.
 - Adding a profile, or an algorithm to a profile's entry, does not change `api_versions_supported`.
 
-The limits MUST be values that every authorized submitter can rely on. A Collector MAY grant a particular submitter higher limits, but MUST NOT enforce lower ones than it publishes.
+
+#### 11.2.2 Authorization server entries
+
+Each element of `authorization_servers` declares one trusted authorization server and the token profile the Collector uses to derive a submitter identity (§4.2.2).
+
+| Member | Type | Required | Meaning |
+|---|---|---|---|
+| `issuer` | string (URL) | REQUIRED | The authorization server's issuer identifier. Compared as an exact string with the `iss` of a token. This is the `issuer` component of a submitter identity. |
+| `token_format` | string | REQUIRED | `jwt` (JWT access tokens, RFC 9068) or `introspection` (opaque tokens, RFC 7662). |
+| `client_id_claim` | string | OPTIONAL | The token claim, or introspection response member, that carries the OAuth client identifier. Default `client_id`. |
+| `scope_claim` | string | OPTIONAL | The claim that carries the granted scopes. Default `scope` (a space-separated string). |
+
+The entry states the authorization server's documented token profile. It does not publish any client or tenant. A Collector MUST NOT list an authorization server whose tokens it cannot validate by the stated profile.
 
 ### 11.3 Example
 
@@ -812,7 +879,11 @@ The values inside each `trace_profiles` entry come from that profile's definitio
       "event_kinds_supported": ["AUTHORIZATION_DECISION", "CAPABILITY_INVOKED", "RUNTIME_EFFECT"]
     }
   ],
-  "authorization_servers": ["https://auth.example.org"],
+  "authorization_servers": [
+    { "issuer": "https://auth.example.org", "token_format": "jwt" },
+    { "issuer": "https://auth2.example.org", "token_format": "introspection", "client_id_claim": "client_id" }
+  ],
+  "sender_constrained_tokens_supported": ["dpop"],
   "ingestion_scope": "trace.write",
   "scopes_supported": ["trace.write"],
   "max_record_bytes": 262144,
@@ -890,7 +961,7 @@ A forwarder is conforming only if it satisfies all of the following.
 ### 12.2 Requirements on Collectors with respect to intermediaries
 
 - **CO-1** A Collector MUST treat a forwarded record exactly as a directly submitted record: authorization, key resolution, signature verification, event-kind permission, identity, idempotency, and findings are identical.
-- **CO-2** A Collector MUST bind the evidence domain to the forwarder's credential, never to anything in the record or transport metadata.
+- **CO-2** A Collector MUST bind the evidence domain to the forwarder's submitter identity `(issuer, client_id)` (§4.2.2), never to anything in the record or transport metadata.
 - **CO-3** A Collector MUST store the signed assertion unchanged. It MUST NOT record the forwarder as the producer. It MAY record the submitter's identity as ingestion metadata outside the assertion.
 - **CO-4** A Collector MUST NOT return a receipt for a record before durable acceptance (§7.2), even if the forwarder is highly trusted. Forwarders rely on this to implement FW-8.
 
@@ -912,7 +983,9 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 - The Collector's clock is a security input. An attacker who can move it can make an expired or revoked key look valid. Synchronize it to a trusted source and alert on large corrections.
 
 **Unauthorized submission.**
-- Authorization precedes content processing (§4.6). A submitter not permitted for a producer learns nothing about keys or records (§4.5, step 7).
+- Authorization precedes content processing (§4.6).
+- **Submitter identity confusion.** Client identifiers are unique only within their authorization server. A Collector that trusts several servers and binds permissions by `client_id` alone would let a client at one server act as a same-named client at another. Bind by `(issuer, client_id)` (§4.2.2), select validating keys only by the token's configured `iss`, never fetch keys from token header parameters, and never take identity from headers or certificates.
+- **Token replay and constraint stripping.** Refuse any token carrying `cnf` unless its proof verifies (§4.2.4), so a constrained token cannot be replayed as a bearer token. A submitter not permitted for a producer learns nothing about keys or records (§4.5, step 7).
 - Submitter-to-producer permission should follow least privilege. A forwarder holding permission for many producers is a high-value credential; use sender-constrained tokens, narrow `ingestion_scope`, and separate credentials per evidence domain.
 
 **Signature verification.**
@@ -971,7 +1044,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 
 | Class | Applies to | Must satisfy |
 |---|---|---|
-| **Collector** | A server offering the single-record endpoint and metadata | §3, §4, §5, §6, §7, §9, §10, §11, §12.2, and tests C-*, G-*, D-* |
+| **Collector** | A server offering the single-record endpoint and metadata | §3, §4, §5, §6, §7, §9, §10, §11, §12.2, and tests A-*, C-*, G-*, D-* |
 | **Collector-Bulk** | A Collector that also offers the bulk endpoint | the Collector class, §8, and tests B-* |
 | **Producer** | A component that signs records and submits them directly or through an intermediary | §5.3 to §5.6, §10.3, and tests P-* |
 | **Forwarder** | A component that relays records from producers to a Collector | §12.1 and tests F-* |
@@ -987,6 +1060,8 @@ Unless a test says otherwise, it starts from an empty record store and this conf
 | Item | Value |
 |---|---|
 | Evidence domains | `D1`, `D2` |
+| Authorization servers | `AS-1` is `https://auth.example.org`, issuing JWT access tokens (RFC 9068). `AS-2` is `https://auth2.example.org`, issuing opaque tokens that the Collector validates by introspection. Both are listed in `authorization_servers`. |
+| Submitter identities | A submitter is `(issuer, client_id)`. Unless a test says otherwise, every client below is issued by `AS-1`. `(AS-2, c-pdp)` exists at `AS-2`, has the ingestion scope, and has **no** evidence-domain binding or producer permission. |
 | Client `c-pdp` | bound to `D1`; ingestion scope; may submit for producer `pdp-fleet-1` |
 | Client `c-pep` | bound to `D1`; ingestion scope; may submit for producer `payments-gateway-pep` |
 | Client `c-fwd` | bound to `D1`; ingestion scope; may submit for both producers |
@@ -1052,6 +1127,28 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-43 | §4.5.1 **(hook)** | Set the clock outside the key's window. Submit V-01 with request headers `Date` and `X-Audit-Time` set to times inside the window. | `400 KEY_NOT_VALID`. Client-supplied times are ignored. |
 | C-44 | §4.5.1 **(hook)** | Revoke the key at time R (`revoked_at` = R). Submit V-01 (signed before R) with the clock at R plus 1 s. | `400 KEY_NOT_VALID`. A record signed before revocation but first presented after it is rejected. |
 
+#### Authentication and submitter identity tests
+
+These tests check §4.2. Tokens are minted by test authorization servers `AS-1` and `AS-2` (§15.2) under the test harness's control. The request body is V-01 unless stated.
+
+| ID | Requirements | Procedure | Expected |
+|---|---|---|---|
+| A-01 | §4.2.1 | `c-pdp` presents a valid RFC 9068 JWT access token (client credentials grant) from `AS-1` as a bearer token. | `201`. This is the minimum mechanism. |
+| A-02 | §4.2.2 | `(AS-2, c-pdp)` presents a valid token from `AS-2`. It has the same `client_id` as the bound `(AS-1, c-pdp)`. | `403 EVIDENCE_DOMAIN_NOT_BOUND`. The `client_id` alone does not select the binding. |
+| A-03 | §4.2.2, §4.4 | Bind `(AS-2, c-pdp)` to `D2` **(hook)**. Submit V-01 with each of the two `c-pdp` identities, in separate requests. | The `AS-1` submission is held in `D1`. The `AS-2` submission is evaluated in `D2` and does not conflict with, replay, or reveal anything in `D1`. |
+| A-04 | §4.2.2, §4.5 | Grant permission to submit for `pdp-fleet-1` to `(AS-1, c-pdp)` only. `(AS-2, c-pdp)` is bound to `D1` but given no producer permission **(hook)**. Submit V-01 with `(AS-2, c-pdp)`. | `403 SUBMITTER_NOT_AUTHORIZED`. |
+| A-05 | §4.2.2 | Present a token from an issuer not in `authorization_servers`. | `401 UNAUTHENTICATED`. |
+| A-06 | §4.2.2, §4.2.1 | Present a JWT with `iss` of `AS-1` signed with `AS-2`'s key; then a JWT with `alg` `none`; then a JWT with an HS256 signature; then a JWT whose header carries a `jku` or `jwk` pointing at attacker keys. | All `401 UNAUTHENTICATED`. No key is fetched from a header parameter. |
+| A-07 | §4.2.2 | Present a valid JWT with no `client_id` claim but with `sub` set to a bound client's identifier. | `401 UNAUTHENTICATED`. The Collector does not fall back to `sub`. |
+| A-08 | §4.2.2, §11.2.2 **(hook)** | Where the `AS-1` entry sets `client_id_claim` to `azp`, present a token with `client_id` of a bound client and `azp` of an unbound one. | The identity comes from `azp`: `403 EVIDENCE_DOMAIN_NOT_BOUND`. |
+| A-09 | §4.2.2 | Present a valid token for an unbound client together with request headers (`X-Client-Id`, `X-Forwarded-Client`), a record body naming a bound producer, and a TLS client certificate whose subject names a bound client. | The headers, body, and certificate subject have no effect. The result is as if they were absent. |
+| A-10 | §4.2.3 | Present tokens that are expired, not yet valid (`nbf` in the future), and have an `aud` that does not contain the Collector's `issuer`. | Each `401 UNAUTHENTICATED`, with `WWW-Authenticate` containing `error="invalid_token"`. |
+| A-11 | §4.2.3 | `AS-2` token, introspection returns `active: false`; then `active: true` with `client_id` of `c-pdp`; then the introspection endpoint is unreachable and no result is cached. | `401 UNAUTHENTICATED`; the identity derived from the response (`201` for a bound client); `503 COLLECTOR_UNAVAILABLE` with `Retry-After`. Nothing is accepted in the third case. |
+| A-12 | §4.2.3 | Introspection returns `iss` that differs from the queried authorization server's issuer. | `401 UNAUTHENTICATED`. |
+| A-13 | §4.2.4 | Present a DPoP-bound or certificate-bound token (`cnf` present) as a plain bearer token, without the proof. If the Collector supports neither mechanism, present any token with `cnf`. | `401 UNAUTHENTICATED`. |
+| A-14 | §4.2.1 | Send the access token as a query parameter and, separately, in the request body, with no `Authorization` header. | `401 UNAUTHENTICATED`. |
+| A-15 | §4.2.2 | Present a token for a user acting through `c-pdp` (authorization code grant), with a `sub` that is a different bound identifier. | The identity is `(AS-1, c-pdp)`. The user's `sub` has no effect. |
+
 #### Chain admission tests
 
 These tests check §7.4. Each names the registration-mode variant (§15.2) it applies to. `chain_admission`, where the Collector returns it, is checked as shown.
@@ -1104,7 +1201,7 @@ These tests check §7.4. Each names the registration-mode variant (§15.2) it ap
 | D-03 | §11.2 | Call each advertised endpoint. | Each is served. `trace_bulk_ingestion_endpoint` is absent if bulk is unsupported. |
 | D-04 | §5.8, §11.2 | For each advertised limit, submit a request at the limit and one beyond it. | At the limit: processed. Beyond: the specified rejection. |
 | D-05 | §11.2 | Submit V-15 (profile not listed). Submit V-01 (profile listed). | `UNSUPPORTED_PROFILE`; accepted. |
-| D-06 | §4.2, §11.2 | Use a valid token from a listed authorization server, then one from an unlisted issuer. | Accepted; `401 UNAUTHENTICATED`. |
+| D-06 | §4.2, §11.2.2 | For each entry of `authorization_servers`, use a valid token. Then use a valid token from an unlisted issuer. | Each listed server's token is accepted according to its `token_format`. The unlisted issuer's token gets `401 UNAUTHENTICATED`. |
 | D-07 | §11.2 | Inspect the document. | No tenant, client, producer, or key information. |
 | D-08 | §7.4.1, §11.2 | Inspect `producer_chain_registration_modes_supported`, then run G-* for the variant it describes. | Contains `first_observed_genesis` or `pre_registered_genesis`, and only modes the Collector supports. Behavior for an unregistered chain matches the set: admitted if `first_observed_genesis` is listed, `CHAIN_NOT_REGISTERED` otherwise. |
 | D-09 | §5.3, §11.2.1 | Inspect each `trace_profiles` entry. | Each has `profile`, `signature_algorithms_supported`, `canonicalization`, and `content_digest_algorithm`. For each, the `<algorithm>` prefix of receipt `content_digest` values for that profile equals `content_digest_algorithm`. |
@@ -1530,7 +1627,13 @@ paths:
                         canonicalization: RFC8785
                         content_digest_algorithm: sha256
                         event_kinds_supported: [AUTHORIZATION_DECISION, CAPABILITY_INVOKED, RUNTIME_EFFECT]
-                    authorization_servers: [https://auth.example.org]
+                    authorization_servers:
+                      - issuer: https://auth.example.org
+                        token_format: jwt
+                      - issuer: https://auth2.example.org
+                        token_format: introspection
+                        client_id_claim: client_id
+                    sender_constrained_tokens_supported: [dpop]
                     ingestion_scope: trace.write
                     scopes_supported: [trace.write]
                     max_record_bytes: 262144
@@ -1558,7 +1661,11 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: OAuth 2.0 access token (RFC 6750). Sender-constrained tokens (RFC 9449, RFC 8705) are RECOMMENDED.
+      description: |
+        OAuth 2.0 access token (RFC 6750). A conforming Collector must accept JWT access tokens (RFC 9068) as
+        bearer tokens. The submitter identity is derived as (issuer, client_id) (specification section 4.2.2).
+        Tokens with a cnf claim must not be accepted as plain bearer tokens. Sender-constrained tokens
+        (RFC 9449, RFC 8705) are RECOMMENDED.
   headers:
     RetryAfter:
       description: Seconds to wait before retrying, or an HTTP-date.
@@ -1881,8 +1988,33 @@ components:
         authorization_servers:
           type: array
           minItems: 1
-          description: Issuer identifiers. Their metadata is discoverable per RFC 8414 or OpenID Connect Discovery.
-          items: {type: string, format: uri}
+          description: |
+            Trusted OAuth 2.0 authorization servers and their token profiles. A submitter identity is the pair
+            (issuer, client_id) and is scoped to the issuing server (specification section 4.2.2).
+          items:
+            type: object
+            required: [issuer, token_format]
+            properties:
+              issuer:
+                type: string
+                format: uri
+                description: Issuer identifier. Metadata is discoverable per RFC 8414 or OpenID Connect Discovery.
+              token_format:
+                type: string
+                enum: [jwt, introspection]
+              client_id_claim:
+                type: string
+                default: client_id
+                description: Claim or introspection member carrying the OAuth client identifier.
+              scope_claim:
+                type: string
+                default: scope
+            additionalProperties: true
+        sender_constrained_tokens_supported:
+          type: array
+          items:
+            type: string
+            enum: [dpop, mtls]
         ingestion_scope: {type: string}
         scopes_supported:
           type: array
