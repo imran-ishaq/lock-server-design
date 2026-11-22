@@ -182,7 +182,7 @@ The minimum content of a producer key registration is informative. The key repre
 
 ### 4.6 Processing order
 
-A Collector MUST produce results as if it evaluated the following steps in order for each request, and MUST report the first failing step. Steps 1 to 6 apply to the request; steps 7 to 16 apply to each record. This order ensures that authorization precedes content processing, that cheap limit checks precede cryptography, and that replay is recognized before key-validity checks.
+A Collector MUST produce results as if it evaluated the following steps in order for each request, and MUST report the first failing step. Steps 1 to 6b apply to the request; steps 7 to 16 apply to each record. This order ensures that authorization precedes content processing, that cheap limit checks precede cryptography, and that replay is recognized before key-validity checks.
 
 | # | Step | Failure |
 |---|---|---|
@@ -191,10 +191,11 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 3 | Check ingestion scope | `403 INSUFFICIENT_SCOPE` |
 | 4 | Derive evidence domain | `403 EVIDENCE_DOMAIN_NOT_BOUND` |
 | 5 | Check `Content-Type`, `Content-Encoding`, body byte limit (`max_record_bytes` for a single-record request, `max_batch_bytes` for a batch), rate limit | `415`, `413 RECORD_TOO_LARGE` or `413 REQUEST_TOO_LARGE`, `429` |
-| 6 | Strict-parse the body; check batch envelope (array, non-empty, count limit, producer uniformity) | `400` envelope codes (§8.1) |
-| 7 | Read each record's `producer` and check submitter-to-producer permission | `403 SUBMITTER_NOT_AUTHORIZED` |
+| 6a | Strict-parse the whole body as one JSON document (§5.2) | `400 MALFORMED_JSON`: whole request rejected |
+| 6b | Check the envelope. Single-record request: the top-level value is a JSON object. Batch: the top-level value is an array, it is non-empty, within the count limit, and (unless mixing is supported) all elements that have a string `producer` have the same one | `400 SCHEMA_INVALID` (single), `400 BATCH_NOT_ARRAY`, `BATCH_EMPTY`, `BATCH_TOO_MANY_RECORDS`, `BATCH_MIXED_PRODUCERS`: whole request rejected |
+| 7 | For each record that is a JSON object with a string `producer`, check submitter-to-producer permission. Elements that are not such objects skip this step and fail at step 9 | `403 SUBMITTER_NOT_AUTHORIZED` |
 | 8 | Check per-record size limit | `413 RECORD_TOO_LARGE` |
-| 9 | Validate record structure: required members, supported profile, `record_id` form, `producer` equals `producer_chain.producer_id`, event-kind schema, required correlation context | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE`, `PRODUCER_IDENTITY_MISMATCH`, `MISSING_EXECUTION_CONTEXT` |
+| 9 | Validate record structure: the element is a JSON object, required members, supported profile, `record_id` form, `producer` equals `producer_chain.producer_id`, event-kind schema, required correlation context | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE`, `PRODUCER_IDENTITY_MISMATCH`, `MISSING_EXECUTION_CONTEXT` |
 | 10 | Compute `content_digest`; look up the record identity; if an accepted record has the same digest, return its original receipt (replay) | none: replay |
 | 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation; check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
 | 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | `400 SIGNATURE_MALFORMED`, `UNSUPPORTED_ALGORITHM`, `SIGNATURE_INVALID` |
@@ -202,6 +203,24 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 14 | Check chain admission (§7.4.1). If admitted, evaluate integrity and completeness and set the flags (§7.4.2, §7.4.3). The evaluation is REQUIRED here only if the Collector advertises `synchronous_integrity_flags`. Otherwise it MAY be deferred until after acceptance (§7.4.5). | `400 CHAIN_NOT_REGISTERED`; otherwise none: flags |
 | 15 | Atomically and durably commit the record and its receipt | `503 COLLECTOR_UNAVAILABLE`, `500 INTERNAL_ERROR` |
 | 16 | Return the receipt | none |
+
+#### Scope of each failure
+
+A failure rejects either the whole request or one element. The scope depends on whether the failure is in the request or in one record.
+
+| Validation failure | Scope | Result |
+|---|---|---|
+| The body is not a valid strict JSON document: syntax error, invalid UTF-8, duplicate member name anywhere, excessive nesting, an unrepresentable value (§5.2) | **Entire request** | `400 MALFORMED_JSON`. Nothing is processed, including elements that appear valid. |
+| The batch envelope is invalid: top-level value is not an array, empty, too many elements, body too large, mixed producers without support | **Entire request** | `400` or `413` with an envelope code. Nothing is processed. |
+| Single-record request whose body is valid JSON but not an object | **Entire request** (the body is the record) | `400 SCHEMA_INVALID`. |
+| Valid JSON element in a batch that is not an object, or that violates the record schema, profile, event-kind schema, `record_id` form, or correlation requirement | **Individual element** | Element rejected with `SCHEMA_INVALID` (or the specific code, such as `UNSUPPORTED_PROFILE`). Other elements are processed. |
+| Record too large (batch element) | **Individual element** | `RECORD_TOO_LARGE`. |
+| Submitter not permitted for the element's producer in a mixed batch | **Individual element** | `SUBMITTER_NOT_AUTHORIZED`. |
+| Key unknown, not valid, or not authorized for the event kind; signature malformed, unsupported algorithm, or invalid | **Individual element** | The specific code of §10.2. |
+| Chain not registered; identity conflict | **Individual element** | `CHAIN_NOT_REGISTERED`; `RECORD_ID_CONFLICT`. |
+| Durable write fails for one element | **Individual element** | `COLLECTOR_UNAVAILABLE`. |
+
+The reason for the first row is that a document that is not valid JSON has no trustworthy element boundaries, and a duplicate member name has two possible meanings. The Collector therefore cannot say which element is affected, and it rejects the request without processing any part of it. In contrast, a valid JSON document whose element has the wrong type or shape has a well-defined element, which can be rejected without affecting the others. On the single-record endpoint the two scopes coincide, because the request contains one record.
 
 ---
 
@@ -216,14 +235,15 @@ A Collector MUST produce results as if it evaluated the following steps in order
 
 ### 5.2 Strict JSON
 
-The request body, and every record, MUST be strict JSON. A Collector MUST reject with `400 MALFORMED_JSON`:
+The request body MUST be strict JSON, parsed as one document before any element of it is processed. A Collector MUST reject the **entire request** with `400 MALFORMED_JSON` if the body contains any of the following, and MUST NOT process any part of it:
 
 - invalid UTF-8, or invalid Unicode scalar values in strings;
 - a duplicate member name at any depth (a parser that silently keeps the first or last duplicate is not acceptable for signed input);
 - `NaN`, `Infinity`, `-Infinity`, or values the profile's canonicalization cannot represent unambiguously (the profile MAY add stricter rules);
 - trailing non-whitespace content after the JSON value;
-- a record that is not a JSON object;
 - nesting deeper than `max_nesting_depth`.
+
+These are failures of the JSON document. A valid JSON value of the wrong type or shape is not malformed JSON. A single-record body that is valid JSON but not an object is rejected with `400 SCHEMA_INVALID`. A batch element that is valid JSON but not an object is rejected individually with `SCHEMA_INVALID` (§8.2). The scope of every failure is in the table in §4.6.
 
 ### 5.3 Record structure and the profile contract
 
@@ -520,7 +540,7 @@ Content-Type: application/json
 ```
 
 - The body is a JSON array of records. The array MUST contain between 1 and `max_batch_records` elements, and the decoded body MUST NOT exceed `max_batch_bytes`.
-- Unless the Collector advertises `bulk_mixed_producers_supported: true`, every record in a batch MUST have the same `producer`. A batch that mixes producers is rejected as a whole with `400 BATCH_MIXED_PRODUCERS`.
+- Unless the Collector advertises `bulk_mixed_producers_supported: true`, every record in a batch MUST have the same `producer`. A batch that mixes producers is rejected as a whole with `400 BATCH_MIXED_PRODUCERS`. Elements that are not JSON objects with a string `producer` do not take part in this check. They are rejected individually with `SCHEMA_INVALID`.
 - A batch always belongs to exactly one evidence domain, the one derived from the authenticated submitter. There is no way to address more than one domain in a request.
 - A Collector that does not implement bulk submission omits `trace_bulk_ingestion_endpoint` from its metadata.
 
@@ -528,7 +548,8 @@ Envelope failures reject the whole request and process nothing:
 
 | Condition | Status | Code |
 |---|---|---|
-| Body is not a JSON array, or is not strict JSON | `400` | `MALFORMED_JSON` |
+| Body is not a strict JSON document (syntax, UTF-8, duplicate member, depth) | `400` | `MALFORMED_JSON` |
+| Body is valid JSON but the top-level value is not an array | `400` | `BATCH_NOT_ARRAY` |
 | Empty array | `400` | `BATCH_EMPTY` |
 | More than `max_batch_records` elements | `400` | `BATCH_TOO_MANY_RECORDS` |
 | Decoded body larger than `max_batch_bytes` | `413` | `REQUEST_TOO_LARGE` |
@@ -543,7 +564,8 @@ When mixed producers are supported, `SUBMITTER_NOT_AUTHORIZED` is reported per e
 - Each record is processed independently, exactly as a single submission. A batch is N single-record ingestions that share one HTTP request. It is not a transaction.
 - A failure on one record (bad signature, unknown key, conflict, size, storage failure) MUST NOT reject, delay the acknowledgement of, or alter the result of any other record.
 - Each accepted record is committed atomically and durably under §7.2 before its element reports `accepted: true`. The Collector MUST NOT report any element accepted before that element's own commit.
-- A non-object element, or an element that is not a valid record, is rejected on its own with a per-element error. It does not reject the batch.
+- An element that is valid JSON but is not a JSON object, or is not a valid record, is rejected on its own with `SCHEMA_INVALID` (or the more specific code). It does not reject the batch.
+- The contrary case is a failure of the JSON document itself: a syntax error, invalid UTF-8, a duplicate member name, or excessive nesting anywhere in the body. That rejects the whole request with `MALFORMED_JSON`, because the Collector cannot trust the element boundaries or the meaning of the affected member. No element is processed. See §4.6 for the scope of every failure.
 - Identity decisions among records in the same batch MUST be made as if the records were processed one at a time in array order. Therefore `[R, R]` yields a first acceptance and then a replay of the same receipt. `[R, R′]`, where `R′` reuses the identity of `R` with different content, yields an acceptance and then a conflict, not the reverse. A Collector MAY process elements concurrently if it preserves this result.
 
 ### 8.3 Response
@@ -643,10 +665,11 @@ An error body MUST NOT contain a bearer token, signed record content, a signatur
 | `REQUEST_TOO_LARGE` | 413 | no | Decoded body exceeds `max_batch_bytes` | Split the batch |
 | `RECORD_TOO_LARGE` | 413 | no | A record exceeds `max_record_bytes` | Terminal for that record |
 | `BATCH_TOO_MANY_RECORDS` | 400 | no | More than `max_batch_records` elements | Split the batch |
+| `BATCH_NOT_ARRAY` | 400 | no | A bulk request body is valid JSON but not an array | Fix request |
 | `BATCH_EMPTY` | 400 | no | Empty batch | Fix request |
 | `BATCH_MIXED_PRODUCERS` | 400 | no | Mixed producers and mixing is not supported | Split by producer |
-| `MALFORMED_JSON` | 400 | no | Not strict JSON, not an object/array as required, duplicate member, or too deep | Terminal for that record |
-| `SCHEMA_INVALID` | 400 | no | Record violates the profile schema, event-kind schema, array limits, or the `record_id` form | Terminal for that record |
+| `MALFORMED_JSON` | 400 | no | The body is not a strict JSON document: syntax error, invalid UTF-8, duplicate member name, unrepresentable value, or excessive nesting. Always rejects the whole request | Fix and resend |
+| `SCHEMA_INVALID` | 400 | no | Valid JSON that is not a valid record: not an object (a bulk element, or a single-record body), missing or mistyped members, event-kind schema, array limits, or the `record_id` form | Terminal for that record |
 | `UNSUPPORTED_PROFILE` | 400 | no | `trace.eat_profile` is not the `profile` of any entry in `trace_profiles` | Terminal for that record |
 | `MISSING_EXECUTION_CONTEXT` | 400 | no | Correlation pair required and absent or incomplete | Terminal for that record |
 | `PRODUCER_IDENTITY_MISMATCH` | 400 | no | `producer` differs from `producer_chain.producer_id` | Terminal for that record |
@@ -963,7 +986,7 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-10 | §5.3 | Submit V-15. | `400 UNSUPPORTED_PROFILE`. |
 | C-11 | §5.4 | Submit V-16. | `400 SIGNATURE_MALFORMED`. |
 | C-12 | §5.6 | Submit V-17. | `400 SCHEMA_INVALID`. |
-| C-13 | §5.2 | Submit V-18 as the raw body. | `400 MALFORMED_JSON`. No record is accepted. |
+| C-13 | §5.2 | Submit V-18 as the raw body. | `400 MALFORMED_JSON`. No record is accepted. This is a failure of the JSON document (a duplicate member name). |
 | C-14 | §7.4.3 | Submit V-02, then V-01. | V-02: `201`, `coverage_gap_flag` true. V-01: `201`, all flags false. Neither is rejected for arrival order. |
 | C-15 | §7.4.2 | Submit V-01, then V-22. | V-22: `201`, `chain_link_failure_flag` true. |
 | C-16 | §7.4.2 | Submit V-01, then V-21. | V-21: `201`, `equivocation_flag` true. Both records are retained **(hook)**. |
@@ -987,6 +1010,8 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-34 | §12.2 CO-3 | `c-fwd` submits V-01 and V-03. Retrieve the stored assertions. | The canonical form of each stored assertion equals that of the submitted record. The forwarder is not recorded as the producer. |
 | C-35 | §7.4.5 | On a Collector with `synchronous_integrity_flags` false or absent, submit V-02 (predecessor missing), then V-01. | Both `201`. No receipt contains any of the four flags. A client must not read absence as `false`: after assessment completes **(hook)**, V-02's coverage-gap finding was true as of V-02's acceptance. |
 | C-36 | §7.4.5 | On the same Collector, submit V-01, then V-22 and V-21. | Both are `201`. Neither is rejected or delayed for chain reasons. After assessment completes **(hook)**, the assessment interface reports a chain-link failure for V-22 and an equivocation involving V-21 and V-01. |
+| C-37 | §4.6, §5.2 | Submit to the single-record endpoint, in separate requests: the JSON value `42`; the array `[V-01]`; the text `{`. | `42` and `[V-01]`: `400 SCHEMA_INVALID`. `{`: `400 MALFORMED_JSON`. All are whole-request rejections. |
+| C-38 | §4.6 | Submit invalid JSON text with no token; with `c-ro`; with `c-nodom`. | `401 UNAUTHENTICATED`; `403 INSUFFICIENT_SCOPE`; `403 EVIDENCE_DOMAIN_NOT_BOUND`. Authorization is evaluated before the body is parsed, so the JSON error is never reached. |
 
 #### Chain admission tests
 
@@ -1018,11 +1043,18 @@ These tests check §7.4. Each names the registration-mode variant (§15.2) it ap
 | B-07 | §8.2 | Submit `[V-01, V-01]`, then (fresh store) `[V-01, V-20]`. | First: accepted, then replay of the same receipt. Second: accepted, then `409 RECORD_ID_CONFLICT` as that element's error. |
 | B-08 | §8.4 | Submit `[V-02, V-01]`. | `200`. Both accepted. V-02 `coverage_gap_flag` true. Arrival order does not cause rejection. |
 | B-09 | §8.2 | Submit `[V-01, <oversized record>, V-02]`. | `200`. The oversized element is `RECORD_TOO_LARGE`. The others are accepted. |
-| B-10 | §8.2 | Submit `[V-01, 42]`. | `200`. `results[1]` is `MALFORMED_JSON`. `results[0]` is accepted. |
+| B-10 | §4.6, §8.2 | Submit `[V-01, 42]`. | `200`. `results[1]` is `SCHEMA_INVALID`: a valid JSON element that is not an object is rejected individually. `results[0]` is accepted. |
 | B-11 | §8.1 | `c-pep` submits `[V-01]`. | `403 SUBMITTER_NOT_AUTHORIZED`, request level. |
 | B-12 | §8.3 **(hook)** | Fail the durable write for one element only. | `200`. That element is `COLLECTOR_UNAVAILABLE`, `retryable` true. Other elements are accepted. |
 | B-13 | §8.3 | Submit a batch where all elements are valid. | `200` (not `201`, `202`, or `207`). |
 | B-14 | §8.2 | Submit `[V-01, V-02]`. Record the order of acceptance **(hook)**. | `results` is in request order regardless of internal processing order. |
+| B-15 | §4.6, §5.2 | Submit `[V-02, <V-18>]`, where the second element is V-18 (a record with a duplicate member name). | `400 MALFORMED_JSON`. The whole request is rejected. V-02 is **not** accepted **(hook)**. |
+| B-16 | §4.6, §5.2 | Submit the truncated text `[` followed by V-01 and no closing bracket. | `400 MALFORMED_JSON`. Nothing is accepted. |
+| B-17 | §4.6, §8.1 | Submit V-01 (a JSON object) to the bulk endpoint. | `400 BATCH_NOT_ARRAY`. Nothing is accepted. |
+| B-18 | §4.6, §5.2 | Submit `[V-01, <a valid record containing an invalid UTF-8 byte sequence in a string>]`. | `400 MALFORMED_JSON`. V-01 is **not** accepted **(hook)**. |
+| B-19 | §4.6, §5.2 | Submit a batch in which one element exceeds `max_nesting_depth`. | `400 MALFORMED_JSON`. Nothing is accepted. |
+| B-20 | §8.1 | With `c-fwd`, submit `[V-01, 42, V-03]`, then `[V-01, 42, V-02]`. | First: `400 BATCH_MIXED_PRODUCERS` (V-01 and V-03 have different producers). Second: `200`; `results[1]` is `SCHEMA_INVALID`; the non-object element does not count toward producer uniformity. |
+| B-21 | §4.6 | Submit a four-element batch: V-01; a correctly signed record that has no `trace` member; V-10; V-02. | `200`. `results[0]` and `results[3]` accepted. `results[1]` is `SCHEMA_INVALID` and `results[2]` is `SIGNATURE_INVALID`. Schema and signature failures are both individual. |
 
 ### 15.5 Discovery tests
 
@@ -1495,7 +1527,7 @@ components:
         type: string
   responses:
     BadRequest:
-      description: Malformed or unverifiable request, or an envelope-level violation.
+      description: Request-level failure. The body is not a valid JSON document, or the single-record body is not an object, or the batch envelope is invalid. Nothing was processed. (Element-level failures in a batch appear in the 200 response instead.)
       content:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
@@ -1722,6 +1754,7 @@ components:
         - REQUEST_TOO_LARGE
         - RECORD_TOO_LARGE
         - BATCH_TOO_MANY_RECORDS
+        - BATCH_NOT_ARRAY
         - BATCH_EMPTY
         - BATCH_MIXED_PRODUCERS
         - MALFORMED_JSON
@@ -2160,8 +2193,8 @@ Preconditions use the fixture in §15.2. Flag expectations apply to a Collector 
 - **Purpose:** Raw text of V-01 with an extra leading `record_id` member (duplicate member name). Not parseable as strict JSON.
 - **Precondition:** fixture
 - **Submitter:** `c-pdp`
-- **Expected:** `400 MALFORMED_JSON`. Nothing accepted.
-- **Used by:** C-13
+- **Expected:** `400 MALFORMED_JSON` for the whole request. Nothing accepted, including any other element of a batch that contains it.
+- **Used by:** C-13, B-15
 
 ```text
 {"record_id":"0191f3a0-7b28-70c4-91eb-e4c3b7a091eb","kid":"key-2026-01","parent_record_ids":[],"producer":"pdp-fleet-1","producer_chain":{"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","producer_chain_id":"chain-pdp-001-a","producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","sequence_number":1},"record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","signature":"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","outcome":"ALLOW","resource_type":"Acme::Payment"},"tokens":[{"issuer":"https://accounts.example.org","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e","token_type":"access_token"}]},"event_kind":"AUTHORIZATION_DECISION","execution_authority":"payments-gateway","policy":{"bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928","policy_language":"cedar","policy_language_version":"4.4.0","policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3"},"runtime":{"pdp_id":"pdp-001"},"signed_at":1781138542,"subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"trace_execution_id":"exec-123"}}
