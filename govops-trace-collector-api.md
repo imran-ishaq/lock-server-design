@@ -199,7 +199,7 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation; check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
 | 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | `400 SIGNATURE_MALFORMED`, `UNSUPPORTED_ALGORITHM`, `SIGNATURE_INVALID` |
 | 13 | If the identity exists with a different digest | `409 RECORD_ID_CONFLICT` |
-| 14 | Check chain admission (§7.4.1); if admitted, evaluate integrity and completeness and set the flags (§7.4.2, §7.4.3) | `400 CHAIN_NOT_REGISTERED`; otherwise none: flags |
+| 14 | Check chain admission (§7.4.1). If admitted, evaluate integrity and completeness and set the flags (§7.4.2, §7.4.3). The evaluation is REQUIRED here only if the Collector advertises `synchronous_integrity_flags`. Otherwise it MAY be deferred until after acceptance (§7.4.5). | `400 CHAIN_NOT_REGISTERED`; otherwise none: flags |
 | 15 | Atomically and durably commit the record and its receipt | `503 COLLECTOR_UNAVAILABLE`, `500 INTERNAL_ERROR` |
 | 16 | Return the receipt | none |
 
@@ -341,6 +341,8 @@ The body is exactly one record. No wrapper object is used.
 
 ### 6.3 Acceptance receipt
 
+The example below is from a Collector that advertises `synchronous_integrity_flags: true`. A Collector that does not omits the four flag members (§7.4.5, Appendix A.2).
+
 ```json
 {
   "accepted": true,
@@ -365,7 +367,7 @@ The body is exactly one record. No wrapper object is used.
 | `receipt_id` | REQUIRED | Opaque string, unique within the evidence domain, assigned once per accepted record, and identical on every replay. |
 | `received_at` | REQUIRED | RFC 3339 UTC timestamp with exactly millisecond precision and a `Z` suffix, assigned by the Collector at acceptance and identical on every replay. |
 | `idempotent_replay` | REQUIRED | `false` on first acceptance; `true` when the response repeats an earlier acceptance. |
-| `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, `late_flag` | REQUIRED | Integrity flags as of the moment of original acceptance (§7.4). |
+| `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, `late_flag` | CONDITIONAL | REQUIRED, all four, if the Collector advertises `synchronous_integrity_flags: true` (§11.2). Otherwise the Collector MUST omit all four (§7.4.5). Values are as of the moment of original acceptance (§7.4). |
 | `unattributed_flag` | CONDITIONAL | REQUIRED if the Collector accepts records without correlation context (§7.5). |
 | `chain_admission` | OPTIONAL | How the record's chain was admitted: `pre_registered_genesis`, `first_observed_genesis`, or `linked_restart_genesis` (§7.4.1). RECOMMENDED when the Collector lists more than one mode. |
 | `receipt_sequence` | OPTIONAL | Position in a Collector-internal receipt chain, if the Collector exposes one. Clients MUST NOT depend on its presence. |
@@ -382,7 +384,7 @@ A Collector MAY add members. A client MUST ignore members it does not recognize.
 |---|---|---|---|
 | **Cryptographic verification** | The producer key was registered, valid, and authorized for the event kind, and the signature is valid as the record's profile defines. | Before acceptance (steps 11 and 12). | A failure is an error response. Success is implied by a receipt. |
 | **Acceptance** | The Collector durably holds the assertion and a receipt for it, bound to the evidence domain, and will return the same receipt for any identical resubmission. | At the `201` or `200` (or an accepted bulk element). | The acceptance receipt. |
-| **Evidence assessment** | Derived findings such as settlement, completeness, trust tier, capability resolution, lineage coverage. | Later, asynchronously, any number of times. | Outside this API. |
+| **Evidence assessment** | Derived findings such as settlement, completeness, trust tier, capability resolution, lineage coverage, and (if the Collector defers it) producer-chain integrity and completeness (§7.4.5). | Later, asynchronously, any number of times. | Outside this API. |
 
 Rules that follow:
 
@@ -390,13 +392,14 @@ Rules that follow:
 2. Acceptance does not imply that the record is true, complete, authorized, correlated, settled, or independently observed. A valid signature proves that the registered producer key signed those bytes.
 3. A Collector MUST NOT label accepted records as `settled`, `complete`, or externally anchored on the basis of acceptance.
 4. Assessments MUST NOT modify the accepted assertion. They are stored and reported separately.
+5. Acceptance establishes successful verification and durable storage, independently of chain assessment. A Collector MAY evaluate producer-chain integrity and completeness asynchronously (§7.4.5).
 
 ### 7.2 When a Collector may acknowledge
 
 A Collector MUST NOT return a receipt (a `201` or `200` from the single-record endpoint, or an accepted element in a bulk response) until **all** of the following hold:
 
 1. Steps 2 to 14 of §4.6 succeeded for the record.
-2. The assertion (as defined in §5.7) and its receipt data (`receipt_id`, `received_at`, `content_digest`, and the integrity flags) have been written to durable storage. Durable means the write survives a process crash and a restart of the Collector, and, if the Collector advertises `acceptance_durability: "replicated_durable"`, the loss of a single storage node.
+2. The assertion (as defined in §5.7) and its receipt data (`receipt_id`, `received_at`, `content_digest`, and the integrity flags if the Collector returns them) have been written to durable storage. Durable means the write survives a process crash and a restart of the Collector, and, if the Collector advertises `acceptance_durability: "replicated_durable"`, the loss of a single storage node.
 3. The write is committed. A record whose commit is pending, in doubt, or later voided MUST NOT have been acknowledged.
 4. The receipt returned is the receipt persisted. A later identical submission MUST return identical `receipt_id` and `received_at`.
 
@@ -419,8 +422,8 @@ Three different questions are asked about a chain. They have different answers, 
 | Concern | Question | Possible outcome |
 |---|---|---|
 | **Admission** | Is this producer authorized to establish or extend this chain on this Collector? | Admitted, or **rejected** with `CHAIN_NOT_REGISTERED`. The only chain-related ground for rejection. |
-| **Integrity** | Does the record link correctly: consecutive position, matching predecessor hash, one record per position? | Always accepted. Reported by `chain_link_failure_flag` and `equivocation_flag`. |
-| **Completeness** | Are the earlier records of the chain held? | Always accepted. Reported by `coverage_gap_flag`. |
+| **Integrity** | Does the record link correctly: consecutive position, matching predecessor hash, one record per position? | Always accepted. Reported by `chain_link_failure_flag` and `equivocation_flag` when assessed synchronously, otherwise by the Collector's assessment interface (§7.4.5). |
+| **Completeness** | Are the earlier records of the chain held? | Always accepted. Reported by `coverage_gap_flag` when assessed synchronously, otherwise by the Collector's assessment interface (§7.4.5). |
 
 Rules:
 
@@ -483,7 +486,18 @@ A gap is a statement about what the Collector holds at the moment of acceptance,
 |---|---|
 | `late_flag` | The Collector's receipt time is later than `signed_at` by more than a configured lateness policy. Lateness alone is never a reason to reject. |
 
-All flags describe the state at the moment of original acceptance and are reproduced unchanged on replay.
+Each flag a Collector returns describes the state at the moment of original acceptance and is reproduced unchanged on replay.
+
+#### 7.4.5 Synchronous and asynchronous assessment
+
+Synchronous chain analysis needs stateful lookups on every record. A high-throughput Collector can defer it. The API allows both.
+
+- A Collector MAY evaluate producer-chain integrity and completeness (and `late_flag`) asynchronously, after durable acceptance. Acceptance establishes successful verification and durable storage, independently of chain assessment.
+- A Collector that does so MUST omit `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, and `late_flag` from every receipt (single and bulk, first acceptance and replay), and MUST NOT advertise `synchronous_integrity_flags: true`. Omission is deliberate: an absent flag means "not assessed at acceptance", never "no finding". A client MUST NOT read an absent flag as `false`.
+- A Collector that returns the four flags in every receipt MUST advertise `synchronous_integrity_flags: true` in its metadata (§11.2). It then MUST return all four in every receipt, and the values MUST be the findings at the moment of acceptance.
+- Chain **admission** (§7.4.1) is always evaluated before acceptance, because it can reject a record. A deferred assessment covers integrity and completeness only.
+- A Collector that defers assessment SHOULD complete it and SHOULD make the findings available through its retrieval or assessment interfaces. Those interfaces are outside this document. The findings, once made, are the same as those a synchronous Collector would have reported for the same arrival sequence, except that they MAY reflect records that arrived after the one being assessed.
+- A Collector MUST NOT present a chain as intact, complete, or free of findings while its assessment is pending or has not been performed, and MUST NOT present deferred assessment as a property of acceptance.
 
 ### 7.5 Missing correlation context
 
@@ -541,7 +555,7 @@ When the envelope was valid and the Collector processed the batch, the status is
   "results": [
     { "index": 0, "accepted": true, "producer_id": "...", "record_id": "...", "content_digest": "sha256:...",
       "receipt_id": "...", "received_at": "...", "idempotent_replay": false,
-      "coverage_gap_flag": false, "chain_link_failure_flag": false, "equivocation_flag": false, "late_flag": false },
+      "coverage_gap_flag": false, "chain_link_failure_flag": false, "equivocation_flag": false, "late_flag": false }
     { "index": 1, "accepted": false, "producer_id": "...", "record_id": "...",
       "error": { "type": "...", "title": "...", "status": 400, "code": "SIGNATURE_INVALID", "retryable": false } }
   ]
@@ -549,7 +563,7 @@ When the envelope was valid and the Collector processed the batch, the status is
 ```
 
 - `results` MUST contain exactly one element per request element, in request order, each with the zero-based `index` of the request element.
-- An accepted element is an acceptance receipt (§6.3) plus `index`.
+- An accepted element is an acceptance receipt (§6.3) plus `index`. The four flag members in the example appear only if the Collector advertises `synchronous_integrity_flags: true` (§7.4.5).
 - A rejected element carries `accepted: false`, `index`, and `error`, a Problem Details object (§10.1) whose `status` is the status the same record would have received on the single-record endpoint. `producer_id` and `record_id` are present when they could be read from the element.
 - If the Collector could not process the batch at all, it MUST respond with a request-level `503` (or `500`, `429`) and no `results`, and MUST NOT have accepted any element. It SHOULD use a request-level error when every element would fail with the same retryable condition.
 
@@ -580,13 +594,13 @@ Idempotency is keyed on record identity and `content_digest`, not on the receive
 |---|---|
 | Same record identity, same `content_digest` as an accepted record | Return the **original acceptance receipt** with `idempotent_replay: true` and status `200` (the first acceptance returned `201`). Do not create a second receipt, a second chain entry, or new flags. |
 | Same record identity, different `content_digest`, record verifies | Return `409` with `RECORD_ID_CONFLICT`. The first-accepted record is authoritative and MUST NOT be overwritten, amended, or replaced. |
-| Same chain position, different `record_id`, both verify | Not a conflict. Accept the new record with `equivocation_flag: true` (§7.4). |
+| Same chain position, different `record_id`, both verify | Not a conflict. Accept the new record. Equivocation is reported by `equivocation_flag: true` if the Collector assesses synchronously, and otherwise by its assessment interface (§7.4.5). |
 | Same `record_id`, different `producer_id` | Different identity. Accept normally. |
 | Same identity bytes in a different evidence domain | Different identity. Accept normally, with an independent receipt. |
 
 Detail:
 
-1. **The original receipt.** A replay returns the same `receipt_id`, `received_at`, `content_digest`, and integrity flags as the first acceptance, with only `idempotent_replay` changed to `true`.
+1. **The original receipt.** A replay returns the same `receipt_id`, `received_at`, `content_digest`, and (when the Collector returns them) integrity flags as the first acceptance, with only `idempotent_replay` changed to `true`.
 2. **Semantically identical bytes.** A resubmission that differs only in whitespace, member order, or equivalent number spelling has the same `content_digest` and is a replay. A re-serializing intermediary therefore cannot cause a false conflict.
 3. **Replay survives key changes.** After a record is accepted, later key rotation, revocation, or validity-window changes MUST NOT turn a replay into a rejection or change the recorded result. This is why replay detection (step 10) precedes key-validity checks (step 11). A new, different record signed by a since-revoked key is still rejected.
 4. **Authorization still applies.** A replay is returned only to a submitter permitted to submit for that producer in that evidence domain (step 7). A Collector MUST NOT confirm the existence of a record identity to any other caller.
@@ -700,6 +714,7 @@ Host: collector.example.org
 | `bulk_mixed_producers_supported` | boolean | OPTIONAL | Default `false`. |
 | `execution_correlation_required` | boolean | RECOMMENDED | Whether records without the full correlation pair are rejected (§7.5). Default `true` when absent. |
 | `producer_chain_registration_modes_supported` | array of string | REQUIRED | Any of `first_observed_genesis`, `pre_registered_genesis`, `linked_restart_genesis`. MUST contain `first_observed_genesis` or `pre_registered_genesis`, and MUST list every mode the Collector supports. The set decides how unregistered chains are treated (§7.4.1): if it contains `first_observed_genesis`, a record of an unregistered chain is admitted; if it contains only `pre_registered_genesis`, such a record is rejected with `CHAIN_NOT_REGISTERED`. |
+| `synchronous_integrity_flags` | boolean | OPTIONAL | Default `false`. `true` if every receipt carries `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, and `late_flag` as evaluated at acceptance (§7.4.5). If `false` or absent, receipts omit all four. |
 | `acceptance_durability` | string | OPTIONAL | `local_durable` or `replicated_durable` (§7.2). A Collector that omits it makes no replication claim. |
 | `content_encodings_supported` | array of string | OPTIONAL | For example `["gzip"]`. Absent means none. |
 
@@ -754,6 +769,7 @@ The values inside each `trace_profiles` entry come from that profile's definitio
   "bulk_mixed_producers_supported": false,
   "execution_correlation_required": true,
   "producer_chain_registration_modes_supported": ["first_observed_genesis", "pre_registered_genesis"],
+  "synchronous_integrity_flags": true,
   "acceptance_durability": "replicated_durable",
   "content_encodings_supported": ["gzip"]
 }
@@ -820,7 +836,7 @@ A forwarder is conforming only if it satisfies all of the following.
 
 ### 12.2 Requirements on Collectors with respect to intermediaries
 
-- **CO-1** A Collector MUST treat a forwarded record exactly as a directly submitted record: authorization, key resolution, signature verification, event-kind permission, identity, idempotency, and flags are identical.
+- **CO-1** A Collector MUST treat a forwarded record exactly as a directly submitted record: authorization, key resolution, signature verification, event-kind permission, identity, idempotency, and findings are identical.
 - **CO-2** A Collector MUST bind the evidence domain to the forwarder's credential, never to anything in the record or transport metadata.
 - **CO-3** A Collector MUST store the signed assertion unchanged. It MUST NOT record the forwarder as the producer. It MAY record the submitter's identity as ingestion metadata outside the assertion.
 - **CO-4** A Collector MUST NOT return a receipt for a record before durable acceptance (§7.2), even if the forwarder is highly trusted. Forwarders rely on this to implement FW-8.
@@ -865,7 +881,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 **Sensitive evidence.** See §14.
 
 **Compromised intermediaries.** A compromised forwarder, OpenTelemetry Collector, or broker can drop, delay, duplicate, reorder, or replay records, and can submit any signed record it has seen. It cannot forge a record for a registered key. Effects and mitigations:
-- *Dropping or delaying* is not preventable by the Collector. It is detectable as producer-chain coverage gaps (`coverage_gap_flag`) and by `late_flag`. Producers that need stronger assurance use direct submission, or keep a local durable copy until receipt.
+- *Dropping or delaying* is not preventable by the Collector. It is detectable as producer-chain coverage gaps (reported by `coverage_gap_flag` or by the Collector's assessment) and as late arrival. Producers that need stronger assurance use direct submission, or keep a local durable copy until receipt.
 - *Substitution or alteration* fails signature verification. The Collector therefore rejects the altered record, and the original remains valid for resubmission.
 - *Duplication and replay* are absorbed by idempotency.
 - *Cross-domain misdirection*: a forwarder with credentials for several domains could place a record in the wrong domain. FW-2 requires separate credentials and queues, and Collectors SHOULD limit each credential to one domain.
@@ -931,6 +947,8 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 
 ### 15.3 Collector tests
 
+**Flags in expected results.** Several tests below, and many vectors in Appendix C, state an expected value of `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, or `late_flag`. Those expectations apply to a Collector that advertises `synchronous_integrity_flags: true`. For any other Collector the receipt MUST NOT contain the four flags, the status and the other receipt members are as stated, and the expected finding is checked through the Collector's assessment interface after assessment completes **(hook)**. Tests C-35, C-36 and D-11 cover the asynchronous case.
+
 | ID | Requirements | Procedure | Expected |
 |---|---|---|---|
 | C-01 | §6, §7.2 | `c-pdp` submits V-01. | `201`; receipt with every REQUIRED member; `idempotent_replay` false; all four flags false; `content_digest` equals the value in Appendix C.3. |
@@ -967,6 +985,8 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-32 | §7.1 | Submit a record that fails verification on a Collector that quarantines **(hook)**. | Response is a rejection with no receipt. The record is absent from retrieval and correlation. |
 | C-33 | §7.2 **(hook)** | Kill the Collector between accepting a request and the durable commit. | No receipt was returned. After restart, resubmission is a first acceptance. |
 | C-34 | §12.2 CO-3 | `c-fwd` submits V-01 and V-03. Retrieve the stored assertions. | The canonical form of each stored assertion equals that of the submitted record. The forwarder is not recorded as the producer. |
+| C-35 | §7.4.5 | On a Collector with `synchronous_integrity_flags` false or absent, submit V-02 (predecessor missing), then V-01. | Both `201`. No receipt contains any of the four flags. A client must not read absence as `false`: after assessment completes **(hook)**, V-02's coverage-gap finding was true as of V-02's acceptance. |
+| C-36 | §7.4.5 | On the same Collector, submit V-01, then V-22 and V-21. | Both are `201`. Neither is rejected or delayed for chain reasons. After assessment completes **(hook)**, the assessment interface reports a chain-link failure for V-22 and an equivocation involving V-21 and V-01. |
 
 #### Chain admission tests
 
@@ -1018,6 +1038,7 @@ These tests check §7.4. Each names the registration-mode variant (§15.2) it ap
 | D-08 | §7.4.1, §11.2 | Inspect `producer_chain_registration_modes_supported`, then run G-* for the variant it describes. | Contains `first_observed_genesis` or `pre_registered_genesis`, and only modes the Collector supports. Behavior for an unregistered chain matches the set: admitted if `first_observed_genesis` is listed, `CHAIN_NOT_REGISTERED` otherwise. |
 | D-09 | §5.3, §11.2.1 | Inspect each `trace_profiles` entry. | Each has `profile`, `signature_algorithms_supported`, `canonicalization`, and `content_digest_algorithm`. For each, the `<algorithm>` prefix of receipt `content_digest` values for that profile equals `content_digest_algorithm`. |
 | D-10 | §5.3, §5.4 | For a profile listing more than one algorithm, submit a record whose key algorithm is not in that profile's list. For two profiles with different suites, submit one record for each. | `400 UNSUPPORTED_ALGORITHM` for the first. Each record in the second case is verified only with its own profile's suite, and the Collector does not accept an algorithm named in a request header. |
+| D-11 | §7.4.5, §11.2 | Compare `synchronous_integrity_flags` with receipts from single and bulk submissions, including a replay. | `true`: every receipt and every accepted bulk element contains all four flags. `false` or absent: none contains any of them. |
 
 ### 15.6 Producer tests
 
@@ -1132,6 +1153,15 @@ HTTP/1.1 201 Created
 Content-Type: application/json
 
 {"accepted":true,"producer_id":"pdp-fleet-1","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","content_digest":"sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226","receipt_id":"108422","received_at":"2026-06-11T00:42:23.456Z","idempotent_replay":false,"coverage_gap_flag":false,"chain_link_failure_flag":false,"equivocation_flag":false,"late_flag":false}
+```
+
+Asynchronous Collector (`synchronous_integrity_flags` false or absent). The four flag members are omitted, and an absent flag does not mean "no finding":
+
+```http
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"accepted":true,"producer_id":"pdp-fleet-1","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","content_digest":"sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226","receipt_id":"108422","received_at":"2026-06-11T00:42:23.456Z","idempotent_replay":false}
 ```
 
 ### A.3 Replay
@@ -1298,6 +1328,16 @@ paths:
                     chain_link_failure_flag: false
                     equivocation_flag: false
                     late_flag: false
+                asynchronous:
+                  summary: Collector that does not assess chains at acceptance. The four flags are omitted.
+                  value:
+                    accepted: true
+                    producer_id: pdp-fleet-1
+                    record_id: 0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41
+                    content_digest: sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226
+                    receipt_id: '108422'
+                    received_at: '2026-06-11T00:42:23.456Z'
+                    idempotent_replay: false
         '200':
           description: Idempotent replay. The original receipt is returned unchanged except for `idempotent_replay`.
           content:
@@ -1429,6 +1469,7 @@ paths:
                     bulk_mixed_producers_supported: false
                     execution_correlation_required: true
                     producer_chain_registration_modes_supported: [first_observed_genesis, pre_registered_genesis]
+                    synchronous_integrity_flags: true
                     acceptance_durability: replicated_durable
                     content_encodings_supported: [gzip]
         '429': {$ref: '#/components/responses/TooManyRequests'}
@@ -1591,10 +1632,6 @@ components:
         - receipt_id
         - received_at
         - idempotent_replay
-        - coverage_gap_flag
-        - chain_link_failure_flag
-        - equivocation_flag
-        - late_flag
       properties:
         accepted: {const: true}
         producer_id: {type: string}
@@ -1612,10 +1649,26 @@ components:
           description: RFC 3339 UTC timestamp with millisecond precision, assigned by the Collector.
           pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
         idempotent_replay: {type: boolean}
-        coverage_gap_flag: {type: boolean}
-        chain_link_failure_flag: {type: boolean}
-        equivocation_flag: {type: boolean}
-        late_flag: {type: boolean}
+        coverage_gap_flag:
+          type: boolean
+          description: |
+            The record's predecessor was not held at acceptance. Present, with the other three flags, only if the Collector advertises
+            synchronous_integrity_flags true. Absence means not assessed at acceptance, not false.
+        chain_link_failure_flag:
+          type: boolean
+          description: |
+            The predecessor's digest did not match, or the genesis sentinel was misused. Present, with the other three flags, only if the Collector advertises
+            synchronous_integrity_flags true. Absence means not assessed at acceptance, not false.
+        equivocation_flag:
+          type: boolean
+          description: |
+            A different record already held the same chain position. Present, with the other three flags, only if the Collector advertises
+            synchronous_integrity_flags true. Absence means not assessed at acceptance, not false.
+        late_flag:
+          type: boolean
+          description: |
+            The record arrived later than the Collector's lateness policy allows. Present, with the other three flags, only if the Collector advertises
+            synchronous_integrity_flags true. Absence means not assessed at acceptance, not false.
         unattributed_flag: {type: boolean}
         chain_admission:
           type: string
@@ -1778,6 +1831,10 @@ components:
           items:
             type: string
             enum: [first_observed_genesis, pre_registered_genesis, linked_restart_genesis]
+        synchronous_integrity_flags:
+          type: boolean
+          default: false
+          description: True if every receipt carries the four integrity flags as evaluated at acceptance.
         acceptance_durability:
           type: string
           enum: [local_durable, replicated_durable]
@@ -1834,7 +1891,7 @@ V-06 has the same digest as V-01.
 
 ### C.4 Vectors
 
-Preconditions use the fixture in §15.2. Where the expected result depends on the registration-mode variant, it is given for M1, M2, and M3 (§15.2); an unqualified result holds for all of them. "Used by" lists the tests in §15 that use the vector.
+Preconditions use the fixture in §15.2. Flag expectations apply to a Collector that advertises `synchronous_integrity_flags: true`; for any other Collector they are the expected assessment findings (§15.3). Where the expected result depends on the registration-mode variant, it is given for M1, M2, and M3 (§15.2); an unqualified result holds for all of them. "Used by" lists the tests in §15 that use the vector.
 
 #### V-01
 
