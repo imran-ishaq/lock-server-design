@@ -163,7 +163,7 @@ Rules:
 1. **Submitter-to-producer permission.** The Collector MUST maintain which submitters may submit records for which `producer_id` values. By default a submitter may submit only for the producer it represents. A submitter MAY submit for other producers only if the Collector's configuration explicitly permits that submitter to forward for those producers (§12). A submitter that is not permitted MUST be rejected with `403` and `SUBMITTER_NOT_AUTHORIZED`, before key resolution or signature verification.
 2. **No self-authenticating keys.** The Collector MUST NOT accept a public key from a request. Keys come only from the producer key registry, provisioned by an administrative path separate from the ingestion scope.
 3. **Producer identity comes from the signed record.** The Collector MUST NOT accept a producer identity, `kid`, or evidence domain from an unsigned header, query, or transport attribute in place of the values in the signed assertion.
-4. **Registry authority.** The index `(evidence domain, producer_id, kid)` locates a candidate key. Authority to sign comes from the administrative registration of that key: it exists, is within its validity window, is not revoked, is registered for this `producer_id`, and lists the record's `trace.event_kind` as permitted.
+4. **Registry authority.** The index `(evidence domain, producer_id, kid)` locates a candidate key. Authority to sign comes from the administrative registration of that key: it exists, is within its validity window and not revoked **at the evaluation time defined in §4.5.1**, is registered for this `producer_id`, and lists the record's `trace.event_kind` as permitted.
 5. **A valid OAuth token never makes an invalid signature acceptable**, and a valid signature never overrides a missing submission permission.
 
 The minimum content of a producer key registration is informative. The key representation and algorithm are defined by the profile. The example is for a profile that uses Ed25519:
@@ -179,6 +179,36 @@ The minimum content of a producer key registration is informative. The key repre
   "revoked_at": null
 }
 ```
+
+#### 4.5.1 Time used for key validity checks
+
+The validity window (`valid_from`, `valid_until`) and `revoked_at` of a key are compared with a single time. This version defines it.
+
+**Evaluation time.** For a record the Collector has not accepted before, the evaluation time is **the Collector's own clock reading when it performs step 11 of §4.6, for that record**. The Collector MUST NOT use any time supplied by the client or the record for this purpose. In particular it MUST NOT use `trace.signed_at`, an HTTP `Date` header, a request header or parameter, a transport timestamp, or a message timestamp from an intermediary.
+
+**Rule.** Given the evaluation time `T`, a key is valid if and only if all of the following hold:
+
+- `valid_from` is absent or `valid_from ≤ T`;
+- `valid_until` is absent or `T < valid_until`; and
+- `revoked_at` is absent or `T < revoked_at`.
+
+A key that is not valid at `T` yields `KEY_NOT_VALID`. A key that is not registered at all yields `KEY_UNKNOWN`.
+
+**Consistency.**
+- Each record has one evaluation time. A Collector MAY use one time for all elements of a bulk request, or a separate time for each element, but MUST be consistent within a request.
+- For an accepted record, the evaluation time MUST NOT be later than that record's `received_at`.
+- The Collector MUST retain, for every accepted record, the identity of the key that verified it (for example its thumbprint) and the evaluation time. A Collector MAY expose them through its retrieval interfaces, which are outside this document.
+
+**Idempotent replay.** A replay (step 10) is answered before key validity is evaluated, and the verification decision made at the original acceptance is preserved. The Collector MUST NOT re-evaluate the key for a record it has already accepted, and MUST NOT change the retained evaluation time, key identity, or receipt. Later expiry, rotation, or revocation of the key has no effect on a replay (§9).
+
+**Why acceptance time.** `signed_at` is asserted by the producer. If it were used, anyone holding an expired or revoked key could backdate a record into the key's validity window. The Collector's clock is the only time source that the producer cannot choose. A trusted external timestamp, which would let a Collector evaluate validity as of an independently attested signing time, is not defined in this version. A later version or profile MAY define it.
+
+**Consequence: delayed delivery.** A record that was legitimately signed while its key was valid can reach the Collector after the key has expired or been revoked. This happens when delivery is delayed by an outage, by a Collector or network failure, or by a queue that holds records for a long time (for example a Kafka topic or an OpenTelemetry persistent queue). Under this rule the Collector rejects such a record with `KEY_NOT_VALID`. This is intended behavior for `v1`, and it affects honest producers as well as attackers. Deployments SHOULD plan for it:
+
+- Operators SHOULD keep a rotated-out key valid for verification for at least the longest delivery delay they tolerate after the producer last signed with it. A registry SHOULD distinguish the time a key stops being used for signing from the time it stops being accepted for verification.
+- Operators SHOULD NOT revoke a key as routine rotation. Revocation means that records first presented after `revoked_at` are rejected, whenever they were signed.
+- Operators SHOULD set `valid_from` earlier than the first use of a key by at least the clock skew between producer and Collector, and Collectors SHOULD keep their clocks synchronized to a trusted source.
+- A rejection with `KEY_NOT_VALID` is recoverable: after an operator extends the key's validity (or re-registers it) so that the Collector's current time falls within it, the same bytes can be resubmitted and accepted. Intermediaries SHOULD keep such records rather than discard them (FW-12, Appendix D).
 
 ### 4.6 Processing order
 
@@ -197,7 +227,7 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 8 | Check per-record size limit | `413 RECORD_TOO_LARGE` |
 | 9 | Validate record structure: the element is a JSON object, required members, supported profile, `record_id` form, `producer` equals `producer_chain.producer_id`, event-kind schema, required correlation context | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE`, `PRODUCER_IDENTITY_MISMATCH`, `MISSING_EXECUTION_CONTEXT` |
 | 10 | Compute `content_digest`; look up the record identity; if an accepted record has the same digest, return its original receipt (replay) | none: replay |
-| 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation; check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
+| 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation at the evaluation time (§4.5.1, the Collector's clock, never `signed_at`); check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
 | 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | `400 SIGNATURE_MALFORMED`, `UNSUPPORTED_ALGORITHM`, `SIGNATURE_INVALID` |
 | 13 | If the identity exists with a different digest | `409 RECORD_ID_CONFLICT` |
 | 14 | Check chain admission (§7.4.1). If admitted, evaluate integrity and completeness and set the flags (§7.4.2, §7.4.3). The evaluation is REQUIRED here only if the Collector advertises `synchronous_integrity_flags`. Otherwise it MAY be deferred until after acceptance (§7.4.5). | `400 CHAIN_NOT_REGISTERED`; otherwise none: flags |
@@ -281,7 +311,7 @@ The TRACE record profile named in the record's `trace.eat_profile` defines the r
 | `record_id` | Producer-generated identity within the producer's namespace. |
 | `trace.eat_profile` | MUST be one of the profiles in the Collector's `trace_profiles` metadata. |
 | `trace.event_kind` | MUST be permitted for the key. |
-| `trace.signed_at` | Producer time (NumericDate). A claim, never an ordering authority. |
+| `trace.signed_at` | Producer time (NumericDate). A claim, never an ordering authority, and never used for key validity (§4.5.1). |
 | `producer_chain.*` | Chain position and predecessor hash (§7.4). |
 | `signature` | The signature value, encoded as the profile specifies. |
 
@@ -624,7 +654,7 @@ Detail:
 
 1. **The original receipt.** A replay returns the same `receipt_id`, `received_at`, `content_digest`, and (when the Collector returns them) integrity flags as the first acceptance, with only `idempotent_replay` changed to `true`.
 2. **Semantically identical bytes.** A resubmission that differs only in whitespace, member order, or equivalent number spelling has the same `content_digest` and is a replay. A re-serializing intermediary therefore cannot cause a false conflict.
-3. **Replay survives key changes.** After a record is accepted, later key rotation, revocation, or validity-window changes MUST NOT turn a replay into a rejection or change the recorded result. This is why replay detection (step 10) precedes key-validity checks (step 11). A new, different record signed by a since-revoked key is still rejected.
+3. **Replay survives key changes.** After a record is accepted, later key rotation, revocation, or validity-window changes MUST NOT turn a replay into a rejection or change the recorded result. This is why replay detection (step 10) precedes key-validity checks (step 11). A new, different record signed by a since-revoked or since-expired key is still rejected, because key validity is evaluated at the Collector's acceptance time, not at `signed_at` (§4.5.1). The verification decision made at the original acceptance is preserved: the key identity and evaluation time retained for the record do not change on replay.
 4. **Authorization still applies.** A replay is returned only to a submitter permitted to submit for that producer in that evidence domain (step 7). A Collector MUST NOT confirm the existence of a record identity to any other caller.
 5. **Conflict only after verification.** A record is judged a conflict only after it passes key and signature verification (step 13 follows step 12), so unverified content cannot probe or provoke conflicts on an identity.
 6. **Atomicity.** Under concurrent submissions the Collector MUST serialize per record identity. Two concurrent identical submissions yield exactly one first acceptance and one replay. Two concurrent submissions with the same identity and different content yield exactly one acceptance and one `409`.
@@ -677,7 +707,7 @@ An error body MUST NOT contain a bearer token, signed record content, a signatur
 | `UNSUPPORTED_ALGORITHM` | 400 | no | The algorithm needed to verify the record is not supported for its profile, or does not match the registered key's algorithm | Terminal for that record |
 | `CHAIN_NOT_REGISTERED` | 400 | no | The record's chain is not registered and the Collector does not admit chains at first sight (§7.4.1) | Operator registers the chain, then resubmit |
 | `KEY_UNKNOWN` | 400 | no | No key registered for `(domain, producer_id, kid)` | Operator registers key |
-| `KEY_NOT_VALID` | 400 | no | Key outside its validity window or revoked | Operator action |
+| `KEY_NOT_VALID` | 400 | no | The key is outside its validity window or revoked at the Collector's evaluation time (§4.5.1). This includes a legitimately signed record that arrives after its key expired | Operator extends the key's validity, then resubmit the same bytes |
 | `EVENT_KIND_NOT_AUTHORIZED` | 400 | no | Key may not sign this `event_kind` | Operator action |
 | `SIGNATURE_INVALID` | 400 | no | Signature does not verify | Terminal for that record |
 | `RECORD_ID_CONFLICT` | 409 | no | Identity already bound to different content | Terminal; investigate |
@@ -878,7 +908,8 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 - Resubmitting a captured record cannot create a second record: identity and digest make it a replay (§9). A replay returns only the original receipt and reveals nothing new, and only to a submitter permitted for the producer.
 - A replayed record cannot move into another evidence domain unless that domain independently registers the producer key and binds the submitter. Registering a key in two domains is an explicit operator decision.
 - Access tokens are bearer credentials. Sender-constrained tokens (RFC 9449, RFC 8705) limit replay of the request itself. TLS protects tokens in transit.
-- Producer timestamps are claims. A Collector MUST NOT use `signed_at` to reject a record as a replay, and MUST use its own `received_at` for receipt order.
+- Producer timestamps are claims. A Collector MUST NOT use `signed_at` to reject a record as a replay, MUST NOT use it to decide key validity (§4.5.1), and MUST use its own `received_at` for receipt order.
+- The Collector's clock is a security input. An attacker who can move it can make an expired or revoked key look valid. Synchronize it to a trusted source and alert on large corrections.
 
 **Unauthorized submission.**
 - Authorization precedes content processing (§4.6). A submitter not permitted for a producer learns nothing about keys or records (§4.5, step 7).
@@ -911,7 +942,9 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 - *Over-broad permission*: a compromised forwarder can submit signed records it holds for any producer it may forward for. Limit the producer set per forwarder.
 - *False acknowledgement upstream*: a faulty forwarder might report acceptance it did not obtain. FW-8 and FW-9 require distinguishing custody from acceptance. A producer that needs proof compares the receipt's `content_digest` with its own computation, obtained by direct submission or from retrieval.
 
-**Key compromise.** Revoking a registry key stops new records from that key. It does not rewrite earlier acceptance results (§9). Records signed with a compromised key before revocation remain accepted and are an assessment concern.
+**Key compromise.** Revoking a registry key stops new records from that key, evaluated at the Collector's acceptance time (§4.5.1). It does not rewrite earlier acceptance results (§9). Records accepted before revocation remain accepted and are an assessment concern. Records signed before revocation but first presented after it are rejected, whether the producer or an attacker presents them. Because `signed_at` is not used, an attacker holding a compromised key cannot backdate a record to before the revocation.
+
+**Backdating and delayed delivery.** Using the Collector's time rather than `signed_at` closes backdating. Its cost is that honest producers whose delivery was delayed past key expiry also see rejections. The operational controls are in §4.5.1.
 
 **Error and log hygiene.** Do not echo record content or tokens in errors or logs. Treat `detail` strings that quote attacker-controlled values as untrusted when rendering.
 
@@ -1012,6 +1045,12 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-36 | §7.4.5 | On the same Collector, submit V-01, then V-22 and V-21. | Both are `201`. Neither is rejected or delayed for chain reasons. After assessment completes **(hook)**, the assessment interface reports a chain-link failure for V-22 and an equivocation involving V-21 and V-01. |
 | C-37 | §4.6, §5.2 | Submit to the single-record endpoint, in separate requests: the JSON value `42`; the array `[V-01]`; the text `{`. | `42` and `[V-01]`: `400 SCHEMA_INVALID`. `{`: `400 MALFORMED_JSON`. All are whole-request rejections. |
 | C-38 | §4.6 | Submit invalid JSON text with no token; with `c-ro`; with `c-nodom`. | `401 UNAUTHENTICATED`; `403 INSUFFICIENT_SCOPE`; `403 EVIDENCE_DOMAIN_NOT_BOUND`. Authorization is evaluated before the body is parsed, so the JSON error is never reached. |
+| C-39 | §4.5.1 **(hook: Collector clock and key registry)** | Set the registry window for `pdp-fleet-1` / `key-2026-01` to `valid_from` 2026-06-12T00:00:00Z, no `valid_until`. Set the Collector clock to 2026-06-12T00:00:01Z. Submit V-01 (`signed_at` is 2026-06-11T00:42:22Z, before `valid_from`). | `201`. The key is valid at the Collector's time. `signed_at` is not used. |
+| C-40 | §4.5.1 **(hook)** | Set the key window to `valid_until` 2026-06-11T00:00:00Z and the Collector clock to 2026-06-11T01:00:00Z. Submit V-01 (`signed_at` 00:42:22Z, inside the window: delayed delivery). Then extend `valid_until` to 2026-06-13T00:00:00Z and resubmit the same bytes. | First: `400 KEY_NOT_VALID`, although the record was signed while the key was valid. Second: `201`. Recovery by extending validity works with the same bytes. |
+| C-41 | §4.5.1 **(hook)** | Window `valid_from` T0, `valid_until` T1. With the clock at exactly T0, submit V-01; separately, with the clock at exactly T1, submit V-02. | V-01: `201` (`valid_from` is inclusive). V-02: `400 KEY_NOT_VALID` (`valid_until` is exclusive). |
+| C-42 | §4.5.1, §9 **(hook)** | Accept V-01 with the clock inside the window. Advance the clock past `valid_until`. Resubmit V-01. Submit V-02. | V-01: `200`, original receipt, `received_at` unchanged, retained key identity and evaluation time unchanged. V-02: `400 KEY_NOT_VALID`. |
+| C-43 | §4.5.1 **(hook)** | Set the clock outside the key's window. Submit V-01 with request headers `Date` and `X-Audit-Time` set to times inside the window. | `400 KEY_NOT_VALID`. Client-supplied times are ignored. |
+| C-44 | §4.5.1 **(hook)** | Revoke the key at time R (`revoked_at` = R). Submit V-01 (signed before R) with the clock at R plus 1 s. | `400 KEY_NOT_VALID`. A record signed before revocation but first presented after it is rejected. |
 
 #### Chain admission tests
 
@@ -2274,6 +2313,7 @@ These bindings show how to satisfy §12 for common intermediaries. The governing
 - **Processors.** No processor in the pipeline may modify, truncate, redact, sample, or split the body of these log records. Use routing or filtering on hints only. Batch processors may group log records but MUST NOT reorder or merge bodies.
 - **Exporter.** The exporter that submits to a Collector MUST be a purpose-built exporter (or equivalent) that: authenticates with its own OAuth client (FW-1); posts the unchanged body text to the single or bulk endpoint; interprets per-element results; applies §10.3; and uses a persistent queue. It MUST NOT treat OTLP-level success as Collector acceptance.
 - **Acknowledgement.** An OTLP `Export` success response means only that the receiving OpenTelemetry Collector took custody (FW-9). A producer that needs acceptance evidence obtains it by direct submission, or by an out-of-band reconciliation against receipts.
+- **Delayed delivery and key expiry.** A persistent queue can hold records past the signing key's `valid_until`. The Collector rejects them with `KEY_NOT_VALID` (§4.5.1). Keep rotated-out keys valid for verification for longer than the queue can hold records, and keep rejected records for resubmission.
 - **Persistent queue.** To satisfy FW-10, enable a file-backed or equivalent durable sending queue and size it for the maximum outage the deployment tolerates. An in-memory queue does not satisfy FW-10.
 
 ### D.2 Kafka and other message brokers
@@ -2284,3 +2324,4 @@ These bindings show how to satisfy §12 for common intermediaries. The governing
 - **Consumer adapter.** Read, batch into a single-producer batch (or mixed batches if the Collector advertises support), submit, and commit the consumer offset only after every record in the batch has an acceptance or a terminal rejection that has been written to a dead-letter destination (FW-13).
 - **Dead letter.** Write each terminally rejected record, with its Problem Details `code`, `record_id`, and `content_digest`, to a dead-letter topic with restricted access (FW-12). Do not drop it. Records for `retryable: true` outcomes stay in the main flow with backoff.
 - **Retention.** Set topic retention longer than the longest tolerated Collector outage, so an outage cannot discard unacknowledged evidence.
+- **Delayed delivery and key expiry.** The Collector evaluates key validity at its own acceptance time (§4.5.1), not at `signed_at`. A record that sat in a topic while its key expired, or was revoked, is rejected with `KEY_NOT_VALID`. To avoid losing evidence, keep rotated-out keys valid for verification for longer than the longest backlog the pipeline can hold, and extend validity before draining a backlog if needed. Route `KEY_NOT_VALID` rejections to the dead-letter destination (FW-12), not to a discard path, so they can be resubmitted after an operator extends validity.
