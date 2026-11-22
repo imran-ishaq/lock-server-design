@@ -264,7 +264,7 @@ A key that is not valid at `T` yields `KEY_NOT_VALID`. A key that is not registe
 
 ### 4.6 Processing order
 
-A Collector MUST produce results as if it evaluated the following steps in order for each request, and MUST report the first failing step. Steps 1 to 6b apply to the request; steps 7 to 16 apply to each record. This order ensures that authorization precedes content processing, that cheap limit checks precede cryptography, and that replay is recognized before key-validity checks.
+A Collector MUST produce results as if it evaluated the following steps in order for each request, and MUST report the first failing step. Steps 10a to 14 apply only to a record that is not a replay (§9.2). Steps 1 to 6b apply to the request; steps 7 to 16 apply to each record. This order ensures that authorization precedes content processing, that cheap limit checks precede cryptography, and that replay is recognized before key-validity checks.
 
 | # | Step | Failure |
 |---|---|---|
@@ -277,8 +277,9 @@ A Collector MUST produce results as if it evaluated the following steps in order
 | 6b | Check the envelope. Single-record request: the top-level value is a JSON object. Batch: the top-level value is an array, it is non-empty, within the count limit, and (unless mixing is supported) all elements that have a string `producer` have the same one | `400 SCHEMA_INVALID` (single), `400 BATCH_NOT_ARRAY`, `BATCH_EMPTY`, `BATCH_TOO_MANY_RECORDS`, `BATCH_MIXED_PRODUCERS`: whole request rejected |
 | 7 | For each record that is a JSON object with a string `producer`, check submitter-to-producer permission. Elements that are not such objects skip this step and fail at step 9 | `403 SUBMITTER_NOT_AUTHORIZED` |
 | 8 | Check per-record size limit | `413 RECORD_TOO_LARGE` |
-| 9 | Validate record structure: the element is a JSON object, required members, supported profile, `record_id` form, `producer` equals `producer_chain.producer_id`, event-kind schema, required correlation context | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE`, `PRODUCER_IDENTITY_MISMATCH`, `MISSING_EXECUTION_CONTEXT` |
-| 10 | Compute `content_digest`; look up the record identity; if an accepted record has the same digest, return its original receipt (replay) | none: replay |
+| 9 | Identify the record: the element is a JSON object, `producer`, `record_id`, and `trace.eat_profile` are strings, and the Collector can canonicalize records of that profile (including a profile kept for replay only, §9.2) | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE` |
+| 10 | Compute `content_digest`; look up the record identity; if an accepted record with the same digest exists and its replay data is retained (§9.1), return its original receipt. Steps 10a to 14 are skipped | none: replay |
+| 10a | Validate the record as a new record under the **current** rules: the profile is currently accepted for new records, required members, `record_id` form, `producer` equals `producer_chain.producer_id`, event-kind schema, array limits, required correlation context | `400 SCHEMA_INVALID`, `UNSUPPORTED_PROFILE`, `PRODUCER_IDENTITY_MISMATCH`, `MISSING_EXECUTION_CONTEXT` |
 | 11 | Resolve the key by `(evidence domain, producer_id, kid)`; check validity window and revocation at the evaluation time (§4.5.1, the Collector's clock, never `signed_at`); check `event_kind` permission | `400 KEY_UNKNOWN`, `KEY_NOT_VALID`, `EVENT_KIND_NOT_AUTHORIZED` |
 | 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | `400 SIGNATURE_MALFORMED`, `UNSUPPORTED_ALGORITHM`, `SIGNATURE_INVALID` |
 | 13 | If the identity exists with a different digest | `409 RECORD_ID_CONFLICT` |
@@ -500,7 +501,7 @@ Rules that follow:
 
 A Collector MUST NOT return a receipt (a `201` or `200` from the single-record endpoint, or an accepted element in a bulk response) until **all** of the following hold:
 
-1. Steps 2 to 14 of §4.6 succeeded for the record.
+1. Steps 2 to 14 of §4.6 succeeded for the record (for a replay, steps 2 to 10).
 2. The assertion (as defined in §5.7) and its receipt data (`receipt_id`, `received_at`, `content_digest`, and the integrity flags if the Collector returns them) have been written to durable storage. Durable means the write survives a process crash and a restart of the Collector, and, if the Collector advertises `acceptance_durability: "replicated_durable"`, the loss of a single storage node.
 3. The write is committed. A record whose commit is pending, in doubt, or later voided MUST NOT have been acknowledged.
 4. The receipt returned is the receipt persisted. A later identical submission MUST return identical `receipt_id` and `received_at`.
@@ -559,7 +560,7 @@ Further rules:
 - **Admission is remembered.** Once a chain is admitted, later records of it are admitted without re-evaluating registration. Removing a registration later does not unadmit a chain or its accepted records.
 - **First-sight anchoring is not authentication of history.** Under `first_observed_genesis`, a record of an unknown chain that is not at `sequence_number` 1 is admitted, the chain is anchored at that first observed record, and `coverage_gap_flag` is true. If the genesis record arrives later, it is accepted and is not rejected for arriving late. Whether such a chain counts as having an authenticated start is an assessment outside this API.
 - **A rejected record leaves no trace.** A `CHAIN_NOT_REGISTERED` rejection is terminal for that chain until an administrator registers it. After registration, the same bytes can be resubmitted and are accepted as a first acceptance.
-- **Registration does not weaken verification.** A record of a registered chain still has to pass steps 9 to 14 of §4.6.
+- **Registration does not weaken verification.** A record of a registered chain still has to pass steps 9 to 14 of §4.6, including 10a.
 - **A link is valid** for `linked_restart_genesis` when the record's profile-defined link names a chain of the same `producer_id`, in the same evidence domain, that the Collector has admitted. Further validation of the link is profile-defined.
 - **Reporting.** A receipt MAY carry `chain_admission` with one of the mode identifiers, stating how this record's chain was admitted. A Collector that lists more than one mode SHOULD include it.
 
@@ -696,7 +697,7 @@ Idempotency is keyed on record identity and `content_digest`, not on the receive
 
 | Condition | Required behavior |
 |---|---|
-| Same record identity, same `content_digest` as an accepted record | Return the **original acceptance receipt** with `idempotent_replay: true` and status `200` (the first acceptance returned `201`). Do not create a second receipt, a second chain entry, or new flags. |
+| Same record identity, same `content_digest` as an accepted record whose replay data is retained (§9.1) | Return the **original acceptance receipt** with `idempotent_replay: true` and status `200` (the first acceptance returned `201`). Do not create a second receipt, a second chain entry, or new flags. |
 | Same record identity, different `content_digest`, record verifies | Return `409` with `RECORD_ID_CONFLICT`. The first-accepted record is authoritative and MUST NOT be overwritten, amended, or replaced. |
 | Same chain position, different `record_id`, both verify | Not a conflict. Accept the new record. Equivocation is reported by `equivocation_flag: true` if the Collector assesses synchronously, and otherwise by its assessment interface (§7.4.5). |
 | Same `record_id`, different `producer_id` | Different identity. Accept normally. |
@@ -711,7 +712,61 @@ Detail:
 5. **Conflict only after verification.** A record is judged a conflict only after it passes key and signature verification (step 13 follows step 12), so unverified content cannot probe or provoke conflicts on an identity.
 6. **Atomicity.** Under concurrent submissions the Collector MUST serialize per record identity. Two concurrent identical submissions yield exactly one first acceptance and one replay. Two concurrent submissions with the same identity and different content yield exactly one acceptance and one `409`.
 7. **Conflict response.** The Problem Details object SHOULD include `producer_id`, `record_id`, `existing_content_digest`, and `submitted_content_digest`. A Collector MAY quarantine the conflicting record for investigation, but MUST NOT admit it to evidence retrieval or correlation under the contested identity.
-8. **Retention.** A Collector SHOULD preserve identity and receipt data for as long as it retains the record. If retention removes a record, resubmitting it is a new first acceptance.
+
+### 9.1 Replay data and its retention
+
+**Replay data** for an accepted record is its record identity, its `content_digest`, and its acceptance receipt (`receipt_id`, `received_at`, and, if the Collector returns them, the integrity flags and `chain_admission`). The Collector needs it to answer a resubmission with the original receipt and to detect a conflict.
+
+- **Minimum period.** A Collector MUST retain the replay data of an accepted record for at least `idempotency_retention_seconds` after the record's `received_at`. The Collector publishes the value in its metadata (§11.2). The value MUST be at least 86,400 (one day). A value of at least 604,800 (seven days) is RECOMMENDED.
+- **Tied to the record.** A Collector MUST NOT remove the replay data of an accepted record while it still holds the record itself. Replay data therefore lasts at least as long as the record, and never less than the minimum period. A Collector MAY retain it longer.
+- **Public value.** The published value MUST be a period that every submitter can rely on. If retention differs by evidence domain, the Collector publishes the shortest value.
+- **Deletion obligations.** A Collector MAY delete a record and its replay data earlier only to comply with a legal or contractual deletion obligation. It SHOULD document that it does so.
+- **Choosing the value.** The period SHOULD exceed the longest time a producer or forwarder may hold and retry a record. For broker-backed delivery, that is the broker's retention, plus the longest tolerated outage, plus the maximum retry backoff (§9.4).
+
+### 9.2 Rules applied to a resubmission of an accepted record
+
+A **replay** is a submission whose record identity and `content_digest` match an accepted record whose replay data is retained. A Collector changes its configuration over time: it adds and withdraws profiles, tightens schema rules, changes limits, expires keys, and changes access. The guarantee for a replay is:
+
+> Within the replay retention period, a submission that satisfies the **current request admission rules** and whose record has the same identity and `content_digest` as an accepted record MUST be answered with the original receipt (`200`, `idempotent_replay: true`), regardless of any change since acceptance to the **record-content rules**.
+
+The two classes of rule are:
+
+| Rule | Applies to a replay? | Notes |
+|---|---|---|
+| Authentication, scope, evidence-domain binding, submitter-to-producer permission (§4.2 to §4.5; steps 2 to 4, 7) | **Yes, current rules.** | A replay is answered only to a submitter who is currently authorized. If a binding or permission has been removed, the result is the corresponding `401` or `403`. If the binding now points to another evidence domain, the submission is evaluated in that domain and is not a replay of the other domain's record. |
+| Media type, encoding, rate limit, strict JSON, batch envelope (steps 5, 6a, 6b) | **Yes, current rules.** | |
+| Body size and per-record size limits (steps 5, 8) | **Yes, current values.** | These protect the Collector before it can identify the record. See the note below. |
+| Record identification and canonicalization (step 9) | **Yes**, but a withdrawn profile is kept available for replay. | See below. |
+| Profile currently accepted for new records, required members, `record_id` form, event-kind schema, array limits, correlation requirement (step 10a) | **No.** | These are record-content rules. They apply only to a record being accepted for the first time. A tightened schema rule or a changed `execution_correlation_required` has no effect on a replay. |
+| Key validity, event-kind authorization, signature (steps 11 and 12) | **No.** | §4.5.1 and §9, item 3. The verification made at acceptance is preserved. |
+| Chain admission, integrity and completeness (step 14) | **No.** | The flags are those of the original receipt. A changed registration or registration mode does not affect a replay. |
+
+**Withdrawn profiles.** The profile's identifier fixes its canonicalization and digest construction (§5.3). A change to either is a new profile identifier. If a Collector stops accepting new records under a profile, it MUST keep the ability to canonicalize and digest records of that profile, for replay only, until every accepted record of that profile has passed its replay retention period. During that time the Collector lists the profile in `trace_profiles_replay_only` (§11.2) and not in `trace_profiles`. A submission under a replay-only profile that matches an accepted record is answered as a replay. Any other submission under it is rejected with `UNSUPPORTED_PROFILE` at step 10a.
+
+**Size limits.** Size limits are applied before the Collector can tell whether a record is a replay, because identifying it requires parsing it. A Collector SHOULD NOT reduce `max_record_bytes` or `max_batch_bytes` while it holds replay data for records that the lower value would exclude. If it does, a resubmission of such a record is rejected with the size error. The earlier acceptance stands. It is neither revoked nor changed, and the producer should treat the error as a rejection of the resubmission, not of the evidence.
+
+**Unchanged rules for new records.** A record that is not a replay is validated under all current rules. In particular, a record with an accepted record's identity and a different `content_digest` is validated first, and is a conflict only if it passes (§9, item 5).
+
+### 9.3 Submission after the replay data has expired
+
+When the replay data of an accepted record has expired, which under §9.1 happens only after the record itself was deleted, the Collector has no basis to recognize the submission. It MUST evaluate it as a new record under all current rules:
+
+- If every current rule passes, the Collector accepts it as a first acceptance: `201`, `idempotent_replay: false`, with a **new** `receipt_id`, a **new** `received_at`, and flags evaluated afresh (`late_flag` may be set if the Collector assesses synchronously). It MUST NOT return the original receipt's values, and MUST NOT report `idempotent_replay: true`.
+- If a current rule fails (for example the signing key has since expired, or the profile has been withdrawn), the Collector rejects it with the corresponding error. It does not report that the record was accepted earlier.
+- If the submission has the same identity as an expired record but different content, it is accepted as a new record. Conflict protection ends with the replay data.
+
+The Collector does not return a special "receipt expired" error. It cannot reliably distinguish an expired receipt from a record it has never seen, and a Collector that does retain such knowledge simply keeps the replay data longer. A producer or forwarder that needs deduplication across a longer period than `idempotency_retention_seconds` MUST NOT rely on the Collector for it. After expiry, the same bytes may be accepted again as new evidence. Consumers of evidence MUST treat two accepted records with the same record identity and `content_digest` as the same record.
+
+### 9.4 Broker-backed delivery
+
+Records that travel through a broker (Kafka, a persistent OpenTelemetry queue, or similar) can be delivered more than once and long after they were first submitted. To keep deduplication reliable:
+
+- The maximum time a record can remain in the pipeline (broker retention, plus the longest outage the deployment tolerates, plus the maximum retry backoff) SHOULD be shorter than `idempotency_retention_seconds`. A forwarder or producer MUST NOT assume that a resubmission later than that is a replay.
+- A forwarder that receives a `200` replay, or an accepted element with `idempotent_replay: true`, treats the record as complete (§8.5). A replay cannot be rejected because a record-content rule changed (§9.2). The only rules that can reject it are the request admission rules, including size limits.
+- A rejection with `403` or `401` for a record that was accepted earlier means that the forwarder's access has changed. It is not a verdict on the evidence, and the forwarder SHOULD retain the record until the access problem is resolved.
+- A record whose replay data has expired and that is resubmitted by a pipeline is accepted as new (§9.3). The forwarder and the Collector's operator SHOULD treat this as a sign that the pipeline holds records too long.
+- Compare the receipt's `content_digest` and `received_at` with the forwarder's record of the earlier receipt, if any, to detect that a record was accepted again.
+
 
 ---
 
@@ -821,6 +876,8 @@ Host: collector.example.org
 | `execution_correlation_required` | boolean | RECOMMENDED | Whether records without the full correlation pair are rejected (§7.5). Default `true` when absent. |
 | `producer_chain_registration_modes_supported` | array of string | REQUIRED | Any of `first_observed_genesis`, `pre_registered_genesis`, `linked_restart_genesis`. MUST contain `first_observed_genesis` or `pre_registered_genesis`, and MUST list every mode the Collector supports. The set decides how unregistered chains are treated (§7.4.1): if it contains `first_observed_genesis`, a record of an unregistered chain is admitted; if it contains only `pre_registered_genesis`, such a record is rejected with `CHAIN_NOT_REGISTERED`. |
 | `synchronous_integrity_flags` | boolean | OPTIONAL | Default `false`. `true` if every receipt carries `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, and `late_flag` as evaluated at acceptance (§7.4.5). If `false` or absent, receipts omit all four. |
+| `idempotency_retention_seconds` | integer | REQUIRED | The minimum period, in seconds from a record's `received_at`, for which the Collector guarantees to retain replay data and so to answer an identical resubmission with the original receipt (§9.1). At least 86,400. |
+| `trace_profiles_replay_only` | array of string | OPTIONAL | Profiles the Collector no longer accepts for new records but still canonicalizes for replay (§9.2). A profile is in `trace_profiles` or in this list, never both. |
 | `acceptance_durability` | string | OPTIONAL | `local_durable` or `replicated_durable` (§7.2). A Collector that omits it makes no replication claim. |
 | `content_encodings_supported` | array of string | OPTIONAL | For example `["gzip"]`. Absent means none. |
 
@@ -893,6 +950,7 @@ The values inside each `trace_profiles` entry come from that profile's definitio
   "bulk_mixed_producers_supported": false,
   "execution_correlation_required": true,
   "producer_chain_registration_modes_supported": ["first_observed_genesis", "pre_registered_genesis"],
+  "idempotency_retention_seconds": 2592000,
   "synchronous_integrity_flags": true,
   "acceptance_durability": "replicated_durable",
   "content_encodings_supported": ["gzip"]
@@ -957,6 +1015,7 @@ A forwarder is conforming only if it satisfies all of the following.
 - **FW-15** A forwarder MUST respect the limits and capabilities in Collector metadata (record and batch size, `bulk_mixed_producers_supported`), and MUST re-read metadata after limit-related errors.
 - **FW-16** A forwarder MUST NOT depend on ordering. It MAY preserve or reorder records.
 - **FW-17** A forwarder MUST NOT log bearer tokens, and SHOULD NOT log record content; logging `producer_id`, `record_id`, `content_digest`, and result codes is sufficient.
+- **FW-18** A forwarder SHOULD limit the time it holds a record (queue or broker retention, plus outage, plus retry backoff) to less than the Collector's `idempotency_retention_seconds`, and SHOULD alert when a record approaches that age. A resubmission after the replay data has expired is accepted as new evidence (§9.3). A forwarder MUST NOT treat an authentication or authorization rejection of an already-accepted record as a verdict on the evidence (§9.4).
 
 ### 12.2 Requirements on Collectors with respect to intermediaries
 
@@ -1149,6 +1208,27 @@ These tests check §4.2. Tokens are minted by test authorization servers `AS-1` 
 | A-14 | §4.2.1 | Send the access token as a query parameter and, separately, in the request body, with no `Authorization` header. | `401 UNAUTHENTICATED`. |
 | A-15 | §4.2.2 | Present a token for a user acting through `c-pdp` (authorization code grant), with a `sub` that is a different bound identifier. | The identity is `(AS-1, c-pdp)`. The user's `sub` has no effect. |
 
+#### Replay retention and configuration-change tests
+
+These tests check §9.1 to §9.4. Each needs the configuration or clock hooks named. V-01 is accepted first, with the original receipt `R`.
+
+| ID | Requirements | Procedure | Expected |
+|---|---|---|---|
+| R-01 | §9.1, §11.2 | Read `idempotency_retention_seconds` from metadata. | An integer of at least 86,400. |
+| R-02 | §9.1 **(hook: clock)** | Accept V-01. Advance the clock to `received_at` plus `idempotency_retention_seconds` minus 1 s. Resubmit V-01. | `200`, the original receipt `R`, `idempotent_replay` true. |
+| R-03 | §9.1 **(hook)** | Accept V-01. Advance the clock well beyond `idempotency_retention_seconds` while V-01 is still held (the Collector's own record retention is longer). Resubmit V-01. | `200`, the original receipt `R`. Replay data lasts as long as the record. |
+| R-04 | §9.3 **(hook: delete the record and its replay data)** | Accept V-01. Delete V-01 and its replay data as retention would. Resubmit V-01, with the key still valid. | `201`, `idempotent_replay` false, a **new** `receipt_id` and `received_at`. Not the values of `R`. |
+| R-05 | §9.3 **(hook)** | As R-04, then submit V-20 (same identity as V-01, different content) instead of V-01. | `201`. Conflict protection ended with the replay data. |
+| R-06 | §9.3 **(hook)** | As R-04, but expire the signing key before the resubmission. | `400 KEY_NOT_VALID`. The Collector does not report that the record was accepted earlier. |
+| R-07 | §9.2 **(hook: schema rules)** | Accept V-01. Enable a stricter event-kind or array-limit rule that V-01 would now fail. Resubmit V-01. Submit V-02, which also fails the new rule. | V-01: `200`, original receipt. V-02: `400 SCHEMA_INVALID`. |
+| R-08 | §9.2 **(hook: profile list)** | Accept V-01. Withdraw the profile of V-01 from new acceptance, keeping it replay-only. Resubmit V-01. Submit V-02. | The metadata lists the profile in `trace_profiles_replay_only` and not in `trace_profiles`. V-01: `200`, original receipt. V-02: `400 UNSUPPORTED_PROFILE`. |
+| R-09 | §9.2 **(hook: profile list, clock)** | Withdraw the profile of V-01 (replay-only). Check the metadata, then advance the clock past `received_at` plus `idempotency_retention_seconds` for every accepted record of that profile. | Until the clock passes that point the profile is listed in `trace_profiles_replay_only` and V-01 is still a replay. Only afterwards may the profile leave the list. |
+| R-10 | §9.2 **(hook: limits)** | Accept V-01. Reduce `max_record_bytes` below V-01's size. Resubmit V-01. Restore the limit. Resubmit V-01. | First resubmission: `413 RECORD_TOO_LARGE`. The earlier acceptance is unchanged **(hook)**. Second: `200`, original receipt. |
+| R-11 | §9.2 **(hook: access)** | Accept V-01 with `c-pdp`. Remove `c-pdp`'s permission for `pdp-fleet-1`. Resubmit V-01. | `403 SUBMITTER_NOT_AUTHORIZED`. A replay is answered only to a currently authorized submitter. |
+| R-12 | §9.2 **(hook)** | Accept V-01 with `c-pdp`. Change the registration mode so that chain `chain-pdp-001-a` would now be rejected (`CHAIN_NOT_REGISTERED`). Resubmit V-01. | `200`, original receipt, original flags. |
+| R-13 | §9.2, §8.2 | In one batch, submit `[V-01 (accepted earlier), V-02 (new), V-01 (again)]`. | `200`. `results[0]` and `results[2]` are replays with the same receipt. `results[1]` is a first acceptance. |
+| R-14 | §9.2 **(hook)** | Accept V-01 with `c-pdp`. Move `c-pdp`'s evidence-domain binding to `D2`. Resubmit V-01. | Evaluated in `D2` as a new record. It is `201` (or the `D2` outcome), not a replay of the `D1` receipt. `D1`'s receipt is unaffected. |
+
 #### Chain admission tests
 
 These tests check §7.4. Each names the registration-mode variant (§15.2) it applies to. `chain_admission`, where the Collector returns it, is checked as shown.
@@ -1207,6 +1287,7 @@ These tests check §7.4. Each names the registration-mode variant (§15.2) it ap
 | D-09 | §5.3, §11.2.1 | Inspect each `trace_profiles` entry. | Each has `profile`, `signature_algorithms_supported`, `canonicalization`, and `content_digest_algorithm`. For each, the `<algorithm>` prefix of receipt `content_digest` values for that profile equals `content_digest_algorithm`. |
 | D-10 | §5.3, §5.4 | For a profile listing more than one algorithm, submit a record whose key algorithm is not in that profile's list. For two profiles with different suites, submit one record for each. | `400 UNSUPPORTED_ALGORITHM` for the first. Each record in the second case is verified only with its own profile's suite, and the Collector does not accept an algorithm named in a request header. |
 | D-11 | §7.4.5, §11.2 | Compare `synchronous_integrity_flags` with receipts from single and bulk submissions, including a replay. | `true`: every receipt and every accepted bulk element contains all four flags. `false` or absent: none contains any of them. |
+| D-12 | §9.1, §11.2 | Inspect `idempotency_retention_seconds` and `trace_profiles_replay_only`. | The retention is at least 86,400. No profile appears in both `trace_profiles` and `trace_profiles_replay_only`. |
 
 ### 15.6 Producer tests
 
@@ -1643,6 +1724,7 @@ paths:
                     bulk_mixed_producers_supported: false
                     execution_correlation_required: true
                     producer_chain_registration_modes_supported: [first_observed_genesis, pre_registered_genesis]
+                    idempotency_retention_seconds: 2592000
                     synchronous_integrity_flags: true
                     acceptance_durability: replicated_durable
                     content_encodings_supported: [gzip]
@@ -1947,6 +2029,7 @@ components:
         - authorization_servers
         - ingestion_scope
         - max_record_bytes
+        - idempotency_retention_seconds
         - producer_chain_registration_modes_supported
       properties:
         issuer:
@@ -2035,6 +2118,14 @@ components:
           items:
             type: string
             enum: [first_observed_genesis, pre_registered_genesis, linked_restart_genesis]
+        idempotency_retention_seconds:
+          type: integer
+          minimum: 86400
+          description: Minimum period, in seconds from a record's received_at, for which replay data is retained (specification section 9.1).
+        trace_profiles_replay_only:
+          type: array
+          items: {type: string}
+          description: Profiles no longer accepted for new records but still answered for replay (specification section 9.2).
         synchronous_integrity_flags:
           type: boolean
           default: false
