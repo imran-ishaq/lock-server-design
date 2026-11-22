@@ -64,13 +64,13 @@ sequenceDiagram
     Trace->>Trace: canonicalize (JCS) + assign chain seq + sign
     Trace->>Lock: buffered, periodic POST (trace.write scope)
     alt accepted
-        Lock-->>Trace: 202 + current_settlement (full design; MVP returns 202 + ingestion flags only)
+        Lock-->>Trace: 201 (200 on replay) + receipt + flags, plus current_settlement in the full design. The Lock MVP currently returns 202
     else transport failure
         Trace->>Trace: retain in producer buffer, retry w/ backoff
     end
 ```
 
-The `current_settlement` on the acceptance response is a **full-design** feature: Lock runs settlement and returns the record's `current_settlement` view. The **MVP Lock Server runs no settlement** (Lock MVP §3, §16), so under the MVP the `202 Accepted` carries only the receipt/ingestion result (`receipt_sequence`, `content_digest`, and flags such as `coverage_gap_flag`) and no settlement status — see `cedarling-trace-design-MVP.md`.
+The `current_settlement` on the acceptance response is a **full-design** feature: Lock runs settlement and returns the record's `current_settlement` view. The **MVP Lock Server runs no settlement** (Lock MVP §3, §16), so under the MVP the acceptance response (`201 Created`, or `200 OK` on replay, in the standard; `202 Accepted` in the current Lock MVP) carries only the receipt/ingestion result (`receipt_sequence`, `content_digest`, and flags such as `coverage_gap_flag`) and no settlement status — see `cedarling-trace-design-MVP.md`.
 
 The decision returned to the caller must never wait on signing or transmission. This mirrors the existing decision-log model, which is already buffered and shipped on `CEDARLING_LOCK_LOG_INTERVAL`.
 
@@ -81,7 +81,7 @@ This section maps each part of the TRACE `AUTHORIZATION_DECISION` envelope (as d
 ### Envelope identity
 
 - **`producer`** / **`producer_chain.producer_id`** — a **stable logical** Cedarling identifier (e.g. `cedarling-fleet-1`), derived from `CEDARLING_APPLICATION_NAME` — **not** a `name/semver` string. Per the design's producer-identity rule, the Cedarling build version/runtime travels as **separate signed metadata** (e.g. `producer_version`) inside the assertion, never folded into `producer_id`, so a Cedarling upgrade does not force a new producer identity, key, or chain. This is the identity whose key Lock's Producer Key Registry must hold.
-- **`record_id`** — a fresh UUID per emitted record. Cedarling already mints a UUIDv7 `request_id` per authorize call; the TRACE `record_id` can reuse it (one decision → one record) so the TRACE record and the operational decision log correlate trivially.
+- **`record_id`** — a fresh UUID per emitted record, written in lowercase canonical text form (standard §5.6; a Collector compares `record_id` as an exact string). Cedarling already mints a UUIDv7 `request_id` per authorize call; the TRACE `record_id` can reuse it (one decision → one record) so the TRACE record and the operational decision log correlate trivially.
 - **`producer_chain.producer_instance_id`** — the per-instance `pdp_id` Cedarling already generates at startup (present in every decision log). One PDP instance = one producer instance.
 - **`trace.runtime.pdp_id`** — the same `pdp_id`. Required by the `AUTHORIZATION_DECISION` schema.
 
@@ -175,7 +175,7 @@ The producer key is **provisioned administratively**, never implicitly from a su
 
 Cedarling can make **thousands of decisions per second**, so two throughput questions must be answered: *which* decisions become TRACE records, and *how* those records reach Lock.
 
-**How they ship: the bulk endpoint.** TRACE emission already runs off the hot path on a buffered, periodic channel (above). Rather than one HTTP request per decision — which does not scale to thousands/sec against Lock's single-record endpoint — Cedarling ships records to Lock's **bulk ingestion endpoint** `POST /api/v1/audit/trace/bulk` (now part of the Lock Server MVP), one producer per batch, flushing on the existing `CEDARLING_LOCK_LOG_INTERVAL`/channel-capacity triggers. The batch is **per-record, not all-or-nothing**: Lock verifies, correlates, and settles each record independently and returns a per-record result, so one bad record never rejects the rest, and settlement stays per-record. Records in a batch MAY span several `producer_chain_id` lanes (see Producer chain), so bulk never forces one serialized sequence allocator.
+**How they ship: the bulk endpoint.** TRACE emission already runs off the hot path on a buffered, periodic channel (above). Rather than one HTTP request per decision — which does not scale to thousands/sec against Lock's single-record endpoint — Cedarling ships records to Lock's **bulk ingestion endpoint** `POST /api/v1/audit/trace/bulk` (now part of the Lock Server MVP), one producer per batch, flushing on the existing `CEDARLING_LOCK_LOG_INTERVAL`/channel-capacity triggers. The batch is **per-record, not all-or-nothing**: Lock verifies, correlates, and settles each record independently and returns a `200` response with a per-record result (standard §8.3), so one bad record never rejects the rest, and settlement stays per-record. Records in a batch MAY span several `producer_chain_id` lanes (see Producer chain), so bulk never forces one serialized sequence allocator.
 
 **Which decisions: emit all, or only configured capabilities.** Signing and chaining every one of thousands of decisions per second is a real cost, and not every decision is governance-relevant. Cedarling therefore supports a configurable **emission policy** (`CEDARLING_TRACE_EMISSION`): emit a TRACE record for **every** decision, or only for an operator-configured **allow-list of capabilities** (the `(action, resource_type)` pairs that matter for governance — matched the same way Lock resolves `capability_id`, see `design.md`: Capability Resolution), optionally with sampling for the rest. The default for a high-throughput deployment is **configured-capabilities-only**; a deployment that needs complete decision evidence sets emit-all and accepts the cost. (The MVP ships only `all` — see `cedarling-trace-design-MVP.md` §6/§7 — because *where* the allow-list is configured is not yet pinned down; specifying that config location is a prerequisite for the `configured_capabilities` default this doc assumes.)
 
@@ -198,7 +198,7 @@ The TRACE spec assigns `trust_tier` from the producer key class and collection p
 | Bundle hash | Compute `bundle_hash` once per loaded policy store; cache it. | No (on load) |
 | Record assembly | Build the `AUTHORIZATION_DECISION` envelope from existing authorize inputs + decision result + token-validation results. | Off hot path |
 | Canonicalize + sign | RFC 8785 JCS + Ed25519 signature over the assertion. | Off hot path |
-| Transport | Reuse the existing Lock audit transport (SSA→DCR, buffered channel, retry), but with the TRACE ingestion scope `trace.write` (not `log.write`); POST TRACE records to the **bulk endpoint** `/api/v1/audit/trace/bulk` (buffered, periodic, per-record results, retry with backoff). | Off hot path |
+| Transport | Reuse the existing Lock audit transport (SSA→DCR, buffered channel, retry), but with the TRACE ingestion scope `trace.write` (not `log.write`); POST TRACE records to the **bulk endpoint** `/api/v1/audit/trace/bulk` (buffered, periodic, per-record results, retry follows the standard (§10.3: same bytes, jittered exponential backoff, `Retry-After` honored, no unchanged retry of a `retryable: false` rejection)). | Off hot path |
 | Correlation propagation | Read `trace_execution_id` / `operation_ids` / session fields as the **normalized values supplied through the authorization API** (the host/sidecar/PEP translates the underlying carrier — header, token claim, or OTel baggage — see Correlation); Cedarling never parses carriers itself and never fabricates. | Read at call |
 
 Cedar evaluation, the `AuthorizeResult` contract, and the decision returned to the caller are unchanged.
@@ -216,7 +216,7 @@ Following the existing `CEDARLING_*` naming (`cedarling-properties.md`), TRACE e
 | `CEDARLING_TRACE_INCLUDE_CLAIMS` | Whether `token_claims[].claims` carries raw claims or `claims_hash` only. | `hash_only` |
 | `CEDARLING_TRACE_OPERATION_BINDING` | `enabled` / `disabled` — compute `request_digest` / `tool_call_digest`. | `disabled` |
 | `CEDARLING_TRACE_EMISSION` | `all` / `configured_capabilities` (optionally with a sampling rate for the rest) — which decisions become TRACE records. | `configured_capabilities` |
-| `CEDARLING_TRACE_ENDPOINT` | Lock TRACE ingestion endpoint; bulk `/api/v1/audit/trace/bulk` by default, may default to the discovered Lock audit endpoint. | discovered |
+| `CEDARLING_TRACE_ENDPOINT` | TRACE ingestion endpoint; bulk `/api/v1/audit/trace/bulk` by default, discovered from the Collector's `/.well-known/govops-trace-configuration` (`trace_bulk_ingestion_endpoint`, standard §11), or from Lock's own discovery document until Lock serves that one. | discovered |
 
 TRACE transport reuses the Lock integration machinery (`CEDARLING_LOCK_*`): the SSA→DCR flow, the buffered channel (`CEDARLING_LOCK_LOG_CHANNEL_CAPACITY`), and retry (`CEDARLING_LOCK_LOG_MAX_RETRIES`). It differs in the OAuth scope: the TRACE ingestion endpoint requires `https://jans.io/oauth/lock/trace.write` (Lock MVP §11), so Cedarling requests `trace.write` at DCR rather than relying on `log.write`. TRACE does not need a new transport, only a new scope, a new payload, and a distinct emission path.
 

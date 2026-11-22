@@ -175,7 +175,7 @@ The MVP documents describe the implementation. They are not rewritten to the sta
 |---|---|
 | `Lock-Server-TRACE-MVP-Design.md` | §11, §12, §14: D1 to D5, D8; §5: D8; §8: D9, D10; §7.1: D11, D12. |
 | `design.md` | Updated to the standard: rows E1 to E6, E8, E9 and D1 to D5, D7, D15 (statuses, Problem Details, `413`/`503`, quarantine, genesis wording, retention). Not changed: D9 to D13, which are decisions (the MVP, not `design.md`, differs on D9, D10 and D13). |
-| `cedarling-trace-design-MVP.md` | §6 Sending: accept `200` for bulk (D2). `CEDARLING_TRACE_ENDPOINT` discovery: D16. §2 and §4: the `FIRST_OBSERVED` requirement depends on D9. |
+| `cedarling-trace-design-MVP.md`, `cedarling-trace-design.md`, `fido-trace-design.md`, `auth-server-trace-design.md` | Updated: retry per standard §10.3 and §8.5, `200`/`207` bulk handling, discovery through the standard's metadata document, lowercase canonical `record_id`, acceptance statuses. The Cedarling MVP has no durable outbox (standard §10.3 SHOULD), recorded as a known deviation. The `FIRST_OBSERVED` requirement depends on D9. |
 | `jans-trace-core-mvp-design.md` | §11 limits against profile §15 (D13); suite keyed by `eat_profile` (D17). |
 | `auth-server-trace-design-MVP.md`, `fido-trace-design-MVP.md` | None. Neither signs records in the MVP. |
 | `govops-trace-profile.md` | D12, D13 if the profile is changed. |

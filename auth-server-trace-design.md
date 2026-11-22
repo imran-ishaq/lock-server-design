@@ -82,7 +82,7 @@ This maps each part of the TRACE `AUTHENTICATION_EVENT` envelope (as defined in 
 ### Envelope identity
 
 - **`producer`** / **`producer_chain.producer_id`** — a **stable logical identifier** for this Auth Server, e.g. `jans-auth` — not a `name/semver` string. Per the design's producer-identity rule, software version/build/runtime travel as **separate signed metadata** (e.g. `producer_version`) inside the assertion, never folded into `producer_id`, so an Auth Server upgrade does not force a new producer identity, key, or chain. The target design registers "one for the Jans Auth Server" in the Producer Key Registry, and allows multiple keys per producer type (e.g. one per AS node).
-- **`record_id`** — a fresh UUID per emitted record.
+- **`record_id`** — a fresh UUID per emitted record, written in lowercase canonical text form (standard §5.6; a Collector compares `record_id` as an exact string).
 - **`producer_chain.producer_instance_id`** — the AS node identity.
 - **`event_kind`** — `AUTHENTICATION_EVENT`.
 
@@ -150,7 +150,7 @@ The TRACE spec assigns `trust_tier` from the producer key class and collection p
 | Token `trace_execution_id` stamping | When an execution context is known, stamp `trace_execution_id` into issued token claims for downstream propagation. | Token issuance |
 | `EXECUTION_STARTED` bootstrap | On RFC 8693 token exchange, emit the bootstrap record (source_token_fingerprint, initial_capability_constraints, exchange_context). | Off hot path |
 | Canonicalize + sign | RFC 8785 JCS + Ed25519 over the assertion. | Off hot path |
-| Transport | Reuse the SSA→DCR audit channel (buffered, periodic, retry with backoff) with the TRACE ingestion scope `trace.write` (not `log.write`, per Lock MVP §11); POST TRACE records. | Off hot path |
+| Transport | Reuse the SSA→DCR audit channel (buffered, periodic) with the TRACE ingestion scope `trace.write` (not `log.write`, per Lock MVP §11); POST TRACE records; retry follows the standard (§10.3: same bytes, jittered exponential backoff, `Retry-After` honored, no unchanged retry of a `retryable: false` rejection). | Off hot path |
 
 The authentication flow, session establishment, token issuance response, and the existing audit-log pipeline are unchanged. TRACE emission runs alongside the audit log, not instead of it.
 

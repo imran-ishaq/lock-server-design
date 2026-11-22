@@ -67,14 +67,14 @@ sequenceDiagram
     Trace->>Trace: canonicalize (JCS) + assign chain seq + sign
     Trace->>Lock: buffered, periodic POST (trace.write scope)
     alt accepted
-        Lock-->>Trace: 202 + current_settlement (full design; MVP returns 202 + ingestion flags only)
+        Lock-->>Trace: 201 (200 on replay) + receipt + flags, plus current_settlement in the full design. The Lock MVP currently returns 202
     else transport failure
         Trace->>Trace: retain in producer buffer, retry w/ backoff
     end
     Note over FIDO,Trace: ABANDONED ceremonies: emitted by the abandonment sweep, not the request path
 ```
 
-The `current_settlement` on the acceptance response is a **full-design** feature; the **MVP Lock Server runs no settlement** (Lock MVP §3, §16), so under the MVP the `202 Accepted` carries only the receipt/ingestion result and flags (e.g. the ceremony stays `unattributed` until correlated), not a settlement status.
+The `current_settlement` on the acceptance response is a **full-design** feature; the **MVP Lock Server runs no settlement** (Lock MVP §3, §16), so under the MVP the acceptance response (`201 Created`, or `200 OK` on replay, in the standard; `202 Accepted` in the current Lock MVP) carries only the receipt/ingestion result and flags (e.g. the ceremony stays `unattributed` until correlated), not a settlement status.
 
 The `ABANDONED` case is special: no result is ever posted back, so there is no request to hang emission off. The FIDO Server already detects abandonment asynchronously — a sweep every `abandonedRequestSweepInterval` seconds relabels named-user ceremonies still `pending` past `unfinishedRequestExpiration`. A `FIDO_CEREMONY` record with `ceremony_outcome: "ABANDONED"` is emitted from that same sweep, not from a request thread. Usernameless (conditional-UI) ceremonies that are never engaged are **not** swept (the server cannot tell an untouched autofill prompt from a genuine drop-off), so — consistent with the metrics behavior — they yield no `ABANDONED` TRACE record either.
 
@@ -85,7 +85,7 @@ This maps each part of the TRACE `FIDO_CEREMONY` envelope (as defined in `design
 ### Envelope identity
 
 - **`producer`** / **`producer_chain.producer_id`** — a **stable logical identifier** for this FIDO Server (or FIDO Server node), e.g. `jans-fido2` — not a `name/semver` string. Per the design's producer-identity rule, software version/build/runtime travel as **separate signed metadata** (e.g. `producer_version`), never folded into `producer_id`, so a FIDO Server upgrade does not force a new producer identity, key, or chain. The target design registers "one for the Jans FIDO Server" in the Producer Key Registry, and notes a deployment may register multiple keys per producer type (e.g. one per node). This is the identity whose key Lock must hold.
-- **`record_id`** — a fresh UUID per emitted ceremony record.
+- **`record_id`** — a fresh UUID per emitted ceremony record, written in lowercase canonical text form (standard §5.6; a Collector compares `record_id` as an exact string).
 - **`producer_chain.producer_instance_id`** — the FIDO node identity. The metrics entry already records a `nodeId` per served request; that same node identity is the producer instance.
 - **`event_kind`** — `FIDO_CEREMONY` (the schema discriminator).
 
@@ -138,7 +138,7 @@ The TRACE spec assigns `trust_tier` from the producer key class and collection p
 | Record assembly | Build the `FIDO_CEREMONY` envelope from the resolved ceremony (type, outcome, attachment, credential hash, session). | Off hot path |
 | Canonicalize + sign | RFC 8785 JCS + Ed25519 over the assertion. | Off hot path |
 | Abandonment emission | Emit `ABANDONED` records from the existing abandonment sweep, not a request thread; skip usernameless-unengaged ceremonies. | Sweep (async) |
-| Transport | Reuse the SSA→DCR audit channel (buffered, periodic, retry with backoff) with the TRACE ingestion scope `trace.write` (not `log.write`, per Lock MVP §11); POST TRACE records. | Off hot path |
+| Transport | Reuse the SSA→DCR audit channel (buffered, periodic) with the TRACE ingestion scope `trace.write` (not `log.write`, per Lock MVP §11); POST TRACE records; retry follows the standard (§10.3: same bytes, jittered exponential backoff, `Retry-After` honored, no unchanged retry of a `retryable: false` rejection). | Off hot path |
 | Session capture | Ensure `session_id`/`session_issuer` are captured and non-empty for emittable ceremonies. | Read at ceremony |
 
 WebAuthn verification, the ceremony response returned to the browser/RP, and the existing metrics/telemetry pipeline are unchanged. TRACE emission runs alongside metrics, not instead of it.
