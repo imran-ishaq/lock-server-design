@@ -111,6 +111,7 @@ JSON is as defined by RFC 8259. "Strict JSON" is defined in §5.2.
 | POST | `/api/v1/audit/trace` | Submit one record | OAuth 2.0 access token with the ingestion scope |
 | POST | `/api/v1/audit/trace/bulk` | Submit a batch of records | OAuth 2.0 access token with the ingestion scope |
 | GET | `/.well-known/govops-trace-configuration` | Collector metadata | None |
+| GET | `/api/v1/audit/trace/receipts/{producer_id}/{record_id}` | Receipt lookup (optional, §7.3.1) | OAuth 2.0 access token with the receipt scope |
 
 The paths above are canonical for API version `v1`. A Collector MAY be deployed under a path prefix; the endpoints it serves are then the URLs published in its metadata (§11), and clients MUST use those URLs instead of constructing them.
 
@@ -188,7 +189,8 @@ The submitter identity is the only identity this document uses for evidence-doma
 
 - The Collector MUST define one ingestion scope and MUST publish its name as `ingestion_scope` in its metadata. A token without that scope yields `403` with `INSUFFICIENT_SCOPE`.
 - The RECOMMENDED scope name is `trace.write`. Deployments MAY use a namespaced value, such as a URI. Clients MUST read the name from metadata.
-- The ingestion scope MUST NOT also authorize producer-key administration, evidence retrieval, or any other function. Retrieval and administration use separate scopes and are not defined here.
+- The ingestion scope MUST NOT also authorize producer-key administration, evidence retrieval, receipt lookup, or any other function. Retrieval and administration use separate scopes and are not defined here.
+- A Collector that offers receipt lookup (§7.3.1) defines a separate **receipt scope** and publishes its name as `receipt_scope`. It MUST differ from the ingestion scope. A token with only the ingestion scope cannot look up receipts, and a token with only the receipt scope cannot submit records.
 
 ### 4.4 Evidence-domain isolation
 
@@ -516,6 +518,54 @@ Consequences:
 
 A receipt establishes only: "This Collector, within this evidence domain, verified these bytes against a registered key and durably accepted them at `received_at`." It is not a signature by the Collector. A Collector that wants to provide a signed or anchored receipt does so through an extension and separate specification.
 
+#### 7.3.1 Receipt lookup (optional)
+
+A producer that submits through OTLP, Kafka, or another intermediary does not necessarily receive the Collector's acceptance receipt (§12). A Collector MAY offer a receipt lookup endpoint so that such a producer can reconcile locally generated evidence against Collector acceptance, without a broader evidence retrieval API.
+
+```http
+GET /api/v1/audit/trace/receipts/{producer_id}/{record_id} HTTP/1.1
+Authorization: Bearer <access-token>
+```
+
+**Availability.** The endpoint is optional. A Collector that offers it publishes `trace_receipt_endpoint` and `receipt_scope` in its metadata (§11.2), and a client uses the URL template from the metadata. A Collector that does not offer it omits both members.
+
+**Parameters.** `producer_id` and `record_id` are both REQUIRED path segments, each percent-encoded as RFC 3986 requires. There are no query parameters. The two together are the record identity (§5.6) within the caller's evidence domain, so a lookup is never ambiguous. The Collector MUST support `GET` and MAY support `HEAD`.
+
+**Authorization.** The following checks apply in order. Each is required:
+
+1. A valid access token (§4.2). Failure: `401 UNAUTHENTICATED`.
+2. The receipt scope (§4.3). Failure: `403 INSUFFICIENT_SCOPE`.
+3. An evidence domain derived from the submitter identity as in §4.4. Failure: `403 EVIDENCE_DOMAIN_NOT_BOUND`. The lookup is confined to that evidence domain, and a receipt in any other domain is not observable.
+4. **Receipt-read permission.** The submitter identity `(issuer, client_id)` MUST be permitted to read receipts for `producer_id` in that evidence domain. This permission is configured separately from submission permission (§4.5). The default is no permission. A Collector MAY grant it to a producer's own identity and to forwarders. Failure: `403 RECEIPT_ACCESS_DENIED`, returned in the same way whether or not a receipt exists, so that a caller without permission learns nothing about the record.
+
+**Response.** `200 OK` with the receipt stored at acceptance:
+
+```json
+{
+  "accepted": true,
+  "producer_id": "pdp-fleet-1",
+  "record_id": "0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41",
+  "content_digest": "sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226",
+  "receipt_id": "108422",
+  "received_at": "2026-06-11T00:42:23.456Z"
+}
+```
+
+- The members are those of the acceptance receipt (§6.3). `receipt_id`, `received_at`, `content_digest`, and, where the Collector returns them, the integrity flags and `chain_admission` are exactly the values the first acceptance returned, and so equal those of any replay (§9). The flags are the snapshot taken at acceptance (§7.4.4). The current assessment of the chain is not available here.
+- `idempotent_replay` is omitted. A lookup is not a submission.
+- The response contains no part of the assertion, no verification detail, and no token information.
+- A receipt is not a signature by the Collector. A lookup response has the same trust as the response to the original submission: a statement by the Collector, authenticated by TLS (§7.3).
+
+**Not found.** `404 Not Found` with `RECEIPT_NOT_FOUND` means that the Collector holds no receipt for that identity in the caller's evidence domain. The record may not have arrived yet, may be in transit, may have been rejected or quarantined (which leave no receipt), or may have been removed after its replay retention. The Collector does not distinguish these cases and a `404` is **not** evidence of rejection. Because the Collector retains replay data for at least `idempotency_retention_seconds` from `received_at` (§9.1), a `404` for a record that was first submitted less than that period ago means that the record has **not been accepted yet**. After that period the answer is inconclusive.
+
+**Comparing digests.** A caller compares the returned `content_digest` with the digest it computed for the record it sent. If they differ, the Collector holds different content under that record identity. The caller MUST NOT treat its own record as accepted and SHOULD raise an alert, because this is the situation that a conflict (§9) reports on submission.
+
+**Other requirements.**
+- The endpoint has no side effects, is not a submission, and creates no chain state.
+- A `200` response is immutable and MAY be cached privately (`Cache-Control: private`). A `404` MUST NOT be cached.
+- A Collector SHOULD rate-limit lookups per submitter identity and respond `429` with `Retry-After`, because a lookup can be used to probe for record identities.
+- Errors use Problem Details (§10).
+
 ### 7.4 Producer chains: admission, integrity, completeness
 
 Producers sequence their records in chains. A chain is identified by `(producer_id, producer_instance_id, producer_chain_id)`, and a record's position in it by `sequence_number`. Records may arrive in any order.
@@ -813,6 +863,8 @@ An error body MUST NOT contain a bearer token, signed record content, a signatur
 | `SIGNATURE_MALFORMED` | 400 | no | The signature encoding is invalid under the record's profile | Terminal for that record |
 | `UNSUPPORTED_ALGORITHM` | 400 | no | The algorithm needed to verify the record is not supported for its profile, or does not match the registered key's algorithm | Terminal for that record |
 | `CHAIN_NOT_REGISTERED` | 400 | no | The record's chain is not registered and the Collector does not admit chains at first sight (§7.4.1) | Operator registers the chain, then resubmit |
+| `RECEIPT_NOT_FOUND` | 404 | yes | Receipt lookup only: no receipt is retained for the identity in the caller's evidence domain (§7.3.1). It does not mean the record was rejected | Retry later within the reconciliation window |
+| `RECEIPT_ACCESS_DENIED` | 403 | no | Receipt lookup only: the submitter identity may not read receipts for this `producer_id` | Operator action |
 | `KEY_UNKNOWN` | 400 | no | No key registered for `(domain, producer_id, kid)` | Operator registers key |
 | `KEY_NOT_VALID` | 400 | no | The key is outside its validity window or revoked at the Collector's evaluation time (§4.5.1). This includes a legitimately signed record that arrives after its key expired | Operator extends the key's validity, then resubmit the same bytes |
 | `EVENT_KIND_NOT_AUTHORIZED` | 400 | no | Key may not sign this `event_kind` | Operator action |
@@ -876,6 +928,8 @@ Host: collector.example.org
 | `execution_correlation_required` | boolean | RECOMMENDED | Whether records without the full correlation pair are rejected (§7.5). Default `true` when absent. |
 | `producer_chain_registration_modes_supported` | array of string | REQUIRED | Any of `first_observed_genesis`, `pre_registered_genesis`, `linked_restart_genesis`. MUST contain `first_observed_genesis` or `pre_registered_genesis`, and MUST list every mode the Collector supports. The set decides how unregistered chains are treated (§7.4.1): if it contains `first_observed_genesis`, a record of an unregistered chain is admitted; if it contains only `pre_registered_genesis`, such a record is rejected with `CHAIN_NOT_REGISTERED`. |
 | `synchronous_integrity_flags` | boolean | OPTIONAL | Default `false`. `true` if every receipt carries `coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, and `late_flag` as evaluated at acceptance (§7.4.5). If `false` or absent, receipts omit all four. |
+| `trace_receipt_endpoint` | string (URI Template) | OPTIONAL | Receipt lookup URL template with the variables `producer_id` and `record_id` (RFC 6570), for example `https://collector.example.org/api/v1/audit/trace/receipts/{producer_id}/{record_id}`. Present if and only if the Collector offers receipt lookup (§7.3.1). |
+| `receipt_scope` | string | CONDITIONAL | The scope required by receipt lookup. REQUIRED if `trace_receipt_endpoint` is present. MUST differ from `ingestion_scope`. |
 | `idempotency_retention_seconds` | integer | REQUIRED | The minimum period, in seconds from a record's `received_at`, for which the Collector guarantees to retain replay data and so to answer an identical resubmission with the original receipt (§9.1). At least 86,400. |
 | `trace_profiles_replay_only` | array of string | OPTIONAL | Profiles the Collector no longer accepts for new records but still canonicalizes for replay (§9.2). A profile is in `trace_profiles` or in this list, never both. |
 | `acceptance_durability` | string | OPTIONAL | `local_durable` or `replicated_durable` (§7.2). A Collector that omits it makes no replication claim. |
@@ -942,7 +996,7 @@ The values inside each `trace_profiles` entry come from that profile's definitio
   ],
   "sender_constrained_tokens_supported": ["dpop"],
   "ingestion_scope": "trace.write",
-  "scopes_supported": ["trace.write"],
+  "scopes_supported": ["trace.write", "trace.receipt.read"],
   "max_record_bytes": 262144,
   "max_batch_bytes": 8388608,
   "max_batch_records": 500,
@@ -950,6 +1004,8 @@ The values inside each `trace_profiles` entry come from that profile's definitio
   "bulk_mixed_producers_supported": false,
   "execution_correlation_required": true,
   "producer_chain_registration_modes_supported": ["first_observed_genesis", "pre_registered_genesis"],
+  "trace_receipt_endpoint": "https://collector.example.org/api/v1/audit/trace/receipts/{producer_id}/{record_id}",
+  "receipt_scope": "trace.receipt.read",
   "idempotency_retention_seconds": 2592000,
   "synchronous_integrity_flags": true,
   "acceptance_durability": "replicated_durable",
@@ -1028,6 +1084,23 @@ A forwarder is conforming only if it satisfies all of the following.
 
 OTLP and Kafka bindings are described in Appendix D. They are informative. The normative requirements are those above.
 
+### 12.4 Reconciling evidence submitted through an intermediary
+
+A producer that submits through an intermediary may never see a receipt (FW-9). It can reconcile its locally generated evidence against Collector acceptance by receipt lookup (§7.3.1), if the Collector offers it. For each record it has produced, the producer keeps `producer_id`, `record_id`, its own `content_digest`, and the time of first submission. It then queries the receipt endpoint and acts on the result:
+
+| Lookup result | Meaning | Producer action |
+|---|---|---|
+| `200`, `content_digest` equal to its own | The Collector accepted this record at `received_at`. | Mark the record accepted. Stop retrying. |
+| `200`, `content_digest` different | The Collector holds different content under this identity. | Do not mark accepted. Raise an alert. Do not resubmit changed content under the same `record_id` (§10.3). |
+| `404`, first submission younger than `idempotency_retention_seconds` | Not accepted (yet). | Keep the record. Retry the lookup later. If the record is no longer held by the pipeline, resubmit it (identical bytes). |
+| `404`, first submission older than `idempotency_retention_seconds` | Inconclusive: not accepted, rejected, or expired. | Do not infer rejection. Resubmitting is permitted. It is accepted as a new record if no longer held (§9.3). |
+| `403` or `401` | No access, or access changed. | Resolve access. Do not treat as a verdict on the evidence. |
+| `429`, `503` | Rate limit or outage. | Back off (§10.3). |
+
+A `404` never proves that a record was rejected. A producer that needs the reason for a rejection uses direct submission, whose response carries the error. A producer SHOULD poll with backoff and SHOULD NOT look up a record before an intermediary has had time to deliver it. If the Collector does not offer receipt lookup, reconciliation is not possible through this API, and the producer relies on direct submission or on its intermediary's records.
+
+- **FW-19** A forwarder that receives Collector receipts SHOULD retain, for each record, `producer_id`, `record_id`, `content_digest`, `receipt_id`, and `received_at`, at least until the upstream producer can reconcile, so it can answer an upstream question without a second submission.
+
 ---
 
 ## 13. Security considerations
@@ -1040,6 +1113,8 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 - Access tokens are bearer credentials. Sender-constrained tokens (RFC 9449, RFC 8705) limit replay of the request itself. TLS protects tokens in transit.
 - Producer timestamps are claims. A Collector MUST NOT use `signed_at` to reject a record as a replay, MUST NOT use it to decide key validity (§4.5.1), and MUST use its own `received_at` for receipt order.
 - The Collector's clock is a security input. An attacker who can move it can make an expired or revoked key look valid. Synchronize it to a trusted source and alert on large corrections.
+
+**Receipt lookup as an oracle.** Receipt lookup tells a caller whether an identity has an accepted record. Guard it with a separate scope and a separate per-producer permission (§7.3.1). Return `RECEIPT_ACCESS_DENIED` identically whether or not a record exists, and confine every lookup to the caller's evidence domain. Rate-limit lookups per submitter identity. Return only the receipt, never the assertion.
 
 **Unauthorized submission.**
 - Authorization precedes content processing (§4.6).
@@ -1103,7 +1178,7 @@ OTLP and Kafka bindings are described in Appendix D. They are informative. The n
 
 | Class | Applies to | Must satisfy |
 |---|---|---|
-| **Collector** | A server offering the single-record endpoint and metadata | §3, §4, §5, §6, §7, §9, §10, §11, §12.2, and tests A-*, C-*, G-*, D-* |
+| **Collector** | A server offering the single-record endpoint and metadata | §3, §4, §5, §6, §7, §9, §10, §11, §12.2, and tests A-*, C-*, G-*, D-*, plus L-* if it offers receipt lookup |
 | **Collector-Bulk** | A Collector that also offers the bulk endpoint | the Collector class, §8, and tests B-* |
 | **Producer** | A component that signs records and submits them directly or through an intermediary | §5.3 to §5.6, §10.3, and tests P-* |
 | **Forwarder** | A component that relays records from producers to a Collector | §12.1 and tests F-* |
@@ -1121,6 +1196,7 @@ Unless a test says otherwise, it starts from an empty record store and this conf
 | Evidence domains | `D1`, `D2` |
 | Authorization servers | `AS-1` is `https://auth.example.org`, issuing JWT access tokens (RFC 9068). `AS-2` is `https://auth2.example.org`, issuing opaque tokens that the Collector validates by introspection. Both are listed in `authorization_servers`. |
 | Submitter identities | A submitter is `(issuer, client_id)`. Unless a test says otherwise, every client below is issued by `AS-1`. `(AS-2, c-pdp)` exists at `AS-2`, has the ingestion scope, and has **no** evidence-domain binding or producer permission. |
+| Client `c-recon` | bound to `D1`; the **receipt scope** only (no ingestion scope); permitted to read receipts for `pdp-fleet-1` and for no other producer. |
 | Client `c-pdp` | bound to `D1`; ingestion scope; may submit for producer `pdp-fleet-1` |
 | Client `c-pep` | bound to `D1`; ingestion scope; may submit for producer `payments-gateway-pep` |
 | Client `c-fwd` | bound to `D1`; ingestion scope; may submit for both producers |
@@ -1185,6 +1261,28 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-42 | §4.5.1, §9 **(hook)** | Accept V-01 with the clock inside the window. Advance the clock past `valid_until`. Resubmit V-01. Submit V-02. | V-01: `200`, original receipt, `received_at` unchanged, retained key identity and evaluation time unchanged. V-02: `400 KEY_NOT_VALID`. |
 | C-43 | §4.5.1 **(hook)** | Set the clock outside the key's window. Submit V-01 with request headers `Date` and `X-Audit-Time` set to times inside the window. | `400 KEY_NOT_VALID`. Client-supplied times are ignored. |
 | C-44 | §4.5.1 **(hook)** | Revoke the key at time R (`revoked_at` = R). Submit V-01 (signed before R) with the clock at R plus 1 s. | `400 KEY_NOT_VALID`. A record signed before revocation but first presented after it is rejected. |
+
+#### Receipt lookup tests
+
+These tests apply to a Collector that publishes `trace_receipt_endpoint`. `c-pdp` submits, and `c-recon` reads receipts (§15.2). V-01 is accepted first unless stated.
+
+| ID | Requirements | Procedure | Expected |
+|---|---|---|---|
+| L-01 | §7.3.1, §11.2 | Read the metadata. | `trace_receipt_endpoint` is a URI template with `producer_id` and `record_id`. `receipt_scope` is present and differs from `ingestion_scope`. |
+| L-02 | §7.3.1 | `c-pdp` submits V-01 and keeps receipt `R`. `c-recon` looks up `pdp-fleet-1` and V-01's `record_id`. | `200`. `receipt_id`, `received_at`, `content_digest` equal those of `R`. If the Collector returns flags, they equal those of `R`. There is no `idempotent_replay` member and no assertion content. |
+| L-03 | §7.3.1, §9 | Resubmit V-01 (a replay), then repeat L-02. | The lookup returns the same receipt as before. |
+| L-04 | §7.3.1 | `c-recon` looks up V-02's `record_id` (never submitted). | `404 RECEIPT_NOT_FOUND`. |
+| L-05 | §7.3.1 | `c-pdp` submits V-10 (rejected, `SIGNATURE_INVALID`). `c-recon` looks up V-10's `record_id`. | `404 RECEIPT_NOT_FOUND`. A rejection leaves no receipt. |
+| L-06 | §4.3, §7.3.1 | `c-pdp` (ingestion scope only) looks up V-01. `c-recon` (receipt scope only) submits V-01. | Both `403 INSUFFICIENT_SCOPE`. |
+| L-07 | §7.3.1 | `c-recon` looks up a receipt for `payments-gateway-pep` (no receipt-read permission), once for an accepted V-03 and once for a record that does not exist. | Both `403 RECEIPT_ACCESS_DENIED`, identical in status and code. Whether the record exists is not revealed. |
+| L-08 | §7.3.1, §4.4 | A client bound to `D2`, with the receipt scope and permission for `pdp-fleet-1` **(hook)**, looks up V-01's `record_id`. | `404 RECEIPT_NOT_FOUND`. A receipt in `D1` is not observable from `D2`. |
+| L-09 | §7.3.1, §4.2 | Look up with no token, with an invalid token, and with a client that has no evidence-domain binding. | `401 UNAUTHENTICATED`, `401 UNAUTHENTICATED`, `403 EVIDENCE_DOMAIN_NOT_BOUND`. |
+| L-10 | §7.3.1, §12.4 | Accept V-01. Submit V-20 (same identity, different content), which is a `409`. Look up V-01's identity. | `200` with V-01's `content_digest`, not V-20's. The first-accepted record is authoritative. |
+| L-11 | §7.3.1, §9.3 **(hook)** | Delete V-01 and its replay data as retention would. Look up V-01. | `404 RECEIPT_NOT_FOUND`. |
+| L-12 | §7.3.1 **(hook)** | Register a producer whose `producer_id` contains reserved characters (for example `pdp/fleet 1`) and accept a record from it. Look it up with the identifier percent-encoded. | `200`, with `producer_id` in the body equal to the decoded value. |
+| L-13 | §7.3.1 | Inspect the headers of the `200` and `404` responses of L-02 and L-04. | The `404` has `Cache-Control: no-store` or an equivalent that prevents caching. The `200` has no caching header weaker than `private`. |
+| L-14 | §7.3.1 | Send lookups in a burst beyond the Collector's limit. | `429` with `Retry-After`. |
+| L-15 | §7.3.1 | Submit V-01 through `c-fwd` (a forwarder). Look up from `c-recon`. | `200`. The lookup does not depend on which submitter sent the record. |
 
 #### Authentication and submitter identity tests
 
@@ -1305,6 +1403,7 @@ These tests check §7.4. Each names the registration-mode variant (§15.2) it ap
 | P-10 | §10.3 | Producer needs to fix a rejected record. | The corrected record has a new `record_id`; the producer never resubmits changed content under the old one. |
 | P-11 | §14 | Inspect produced records. | No raw bearer tokens or credentials. |
 | P-12 | §7.5 | Producer has no correlation pair for an event while the Collector requires it. | The producer does not submit, or reports the condition. It does not invent values. |
+| P-13 | §12.4 | Stub receipt endpoint returns: `200` with the producer's digest; `200` with a different digest; `404` within the retention period; `404` after it; `403`. | The producer marks the first accepted and stops retrying. It raises an alert for the second and does not mark it accepted. For the third it keeps the record and retries the lookup later. For the fourth it does not infer rejection. For the fifth it does not treat it as a verdict on the evidence. |
 
 ### 15.7 Forwarder tests
 
@@ -1321,6 +1420,7 @@ These tests check §7.4. Each names the registration-mode variant (§15.2) it ap
 | F-09 | FW-15, FW-1 | Metadata states limits and no mixed producers. | Batches respect limits and producer uniformity. The forwarder authenticates with its own credential. |
 | F-10 | FW-13 | Broker-backed forwarder; Collector unavailable. | The consumer position does not advance. After recovery, delivery completes. |
 | F-11 | FW-17 | Inspect forwarder logs. | No tokens; no record content. |
+| F-12 | FW-19 | Pass records through the forwarder and ask it for what it holds per record. | For each record it can supply `producer_id`, `record_id`, `content_digest`, `receipt_id`, `received_at` from the Collector's receipt. |
 
 ---
 
@@ -1681,6 +1781,72 @@ paths:
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/audit/trace/receipts/{producer_id}/{record_id}:
+    get:
+      tags: [Ingestion]
+      operationId: getAcceptanceReceipt
+      summary: Look up an acceptance receipt (optional)
+      description: |
+        Optional. Returns the receipt stored when the record was accepted, so a producer that submitted
+        through an intermediary can reconcile. Requires the receipt scope and a per-producer receipt-read
+        permission (specification section 7.3.1). A 404 does not mean the record was rejected.
+      security:
+        - oauth2: [trace.receipt.read]
+        - bearerAuth: []
+      parameters:
+        - name: producer_id
+          in: path
+          required: true
+          description: The signed producer identifier, percent-encoded.
+          schema: {type: string, minLength: 1}
+        - name: record_id
+          in: path
+          required: true
+          description: The producer-generated record identifier (lowercase UUID or uppercase ULID).
+          schema:
+            type: string
+            oneOf:
+              - pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              - pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+      responses:
+        '200':
+          description: The stored receipt. `idempotent_replay` is omitted because a lookup is not a submission.
+          headers:
+            Cache-Control:
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredReceipt'
+              examples:
+                stored:
+                  value:
+                    accepted: true
+                    producer_id: pdp-fleet-1
+                    record_id: 0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41
+                    content_digest: sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226
+                    receipt_id: '108422'
+                    received_at: '2026-06-11T00:42:23.456Z'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404':
+          description: No receipt is retained for the identity in the caller's evidence domain. Not evidence of rejection.
+          headers:
+            Cache-Control:
+              schema: {type: string}
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+              examples:
+                notfound:
+                  value:
+                    type: https://govops.owasp.org/trace/errors/receipt-not-found
+                    title: No receipt is retained for this record
+                    status: 404
+                    code: RECEIPT_NOT_FOUND
+                    retryable: true
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /.well-known/govops-trace-configuration:
     get:
       tags: [Discovery]
@@ -1716,7 +1882,9 @@ paths:
                         client_id_claim: client_id
                     sender_constrained_tokens_supported: [dpop]
                     ingestion_scope: trace.write
-                    scopes_supported: [trace.write]
+                    scopes_supported: [trace.write, trace.receipt.read]
+                    trace_receipt_endpoint: https://collector.example.org/api/v1/audit/trace/receipts/{producer_id}/{record_id}
+                    receipt_scope: trace.receipt.read
                     max_record_bytes: 262144
                     max_batch_bytes: 8388608
                     max_batch_records: 500
@@ -1740,6 +1908,7 @@ components:
           tokenUrl: https://auth.example.org/token
           scopes:
             trace.write: Submit TRACE records.
+            trace.receipt.read: Look up acceptance receipts.
     bearerAuth:
       type: http
       scheme: bearer
@@ -1879,7 +2048,7 @@ components:
           description: Signature value. Algorithm, input, and encoding are defined by the record's profile, not by this API.
           minLength: 1
       additionalProperties: true
-    AcceptanceReceipt:
+    ReceiptCore:
       type: object
       description: |
         Evidence that the Collector verified and durably accepted the record. It is not a statement that
@@ -1891,7 +2060,6 @@ components:
         - content_digest
         - receipt_id
         - received_at
-        - idempotent_replay
       properties:
         accepted: {const: true}
         producer_id: {type: string}
@@ -1938,6 +2106,19 @@ components:
           type: integer
           description: OPTIONAL. Position in a Collector-internal receipt chain, if one is exposed.
       additionalProperties: true
+    AcceptanceReceipt:
+      description: Receipt returned by a submission. It is the receipt core plus `idempotent_replay`.
+      allOf:
+        - $ref: '#/components/schemas/ReceiptCore'
+        - type: object
+          required: [idempotent_replay]
+    StoredReceipt:
+      description: Receipt returned by a lookup. It is the receipt core without `idempotent_replay`.
+      allOf:
+        - $ref: '#/components/schemas/ReceiptCore'
+        - type: object
+          properties:
+            idempotent_replay: false
     BulkAccepted:
       allOf:
         - $ref: '#/components/schemas/AcceptanceReceipt'
@@ -1998,6 +2179,8 @@ components:
         - EVENT_KIND_NOT_AUTHORIZED
         - SIGNATURE_INVALID
         - RECORD_ID_CONFLICT
+        - RECEIPT_NOT_FOUND
+        - RECEIPT_ACCESS_DENIED
         - RATE_LIMITED
         - COLLECTOR_UNAVAILABLE
         - COLLECTOR_INTEGRITY_HOLD
@@ -2041,6 +2224,12 @@ components:
           minItems: 1
           items: {type: string, pattern: '^v[0-9]+$'}
         trace_ingestion_endpoint: {type: string, format: uri}
+        trace_receipt_endpoint:
+          type: string
+          description: URI Template (RFC 6570) with variables producer_id and record_id. Present only if receipt lookup is offered.
+        receipt_scope:
+          type: string
+          description: Scope required by receipt lookup. Required if trace_receipt_endpoint is present. Differs from ingestion_scope.
         trace_bulk_ingestion_endpoint:
           type: string
           format: uri
@@ -2535,7 +2724,7 @@ These bindings show how to satisfy §12 for common intermediaries. The governing
 - **Attributes.** Attributes such as `govops.trace.content_type = application/json` and a routing key are hints. They never carry producer identity, domain, or correlation values that the Collector relies on (FW-5).
 - **Processors.** No processor in the pipeline may modify, truncate, redact, sample, or split the body of these log records. Use routing or filtering on hints only. Batch processors may group log records but MUST NOT reorder or merge bodies.
 - **Exporter.** The exporter that submits to a Collector MUST be a purpose-built exporter (or equivalent) that: authenticates with its own OAuth client (FW-1); posts the unchanged body text to the single or bulk endpoint; interprets per-element results; applies §10.3; and uses a persistent queue. It MUST NOT treat OTLP-level success as Collector acceptance.
-- **Acknowledgement.** An OTLP `Export` success response means only that the receiving OpenTelemetry Collector took custody (FW-9). A producer that needs acceptance evidence obtains it by direct submission, or by an out-of-band reconciliation against receipts.
+- **Acknowledgement.** An OTLP `Export` success response means only that the receiving OpenTelemetry Collector took custody (FW-9). A producer that needs acceptance evidence obtains it by direct submission, or by reconciling with the Collector's receipt lookup (§7.3.1, §12.4) using the record's `producer_id`, `record_id`, and its own digest.
 - **Delayed delivery and key expiry.** A persistent queue can hold records past the signing key's `valid_until`. The Collector rejects them with `KEY_NOT_VALID` (§4.5.1). Keep rotated-out keys valid for verification for longer than the queue can hold records, and keep rejected records for resubmission.
 - **Persistent queue.** To satisfy FW-10, enable a file-backed or equivalent durable sending queue and size it for the maximum outage the deployment tolerates. An in-memory queue does not satisfy FW-10.
 
@@ -2544,6 +2733,7 @@ These bindings show how to satisfy §12 for common intermediaries. The governing
 - **Carriage.** The message value is the exact record bytes (UTF-8 JSON). The message key SHOULD be `producer_id` and `producer_chain_id`, which keeps a chain's records in one partition and in order. Order is not required for correctness (§8.4).
 - **Domains.** Use a separate topic (or cluster) per evidence domain, consumed by a separate adapter instance holding the credential for that domain (FW-2). Topic names are routing, not evidence.
 - **Producer to broker.** Use acknowledgements from all in-sync replicas and idempotent production, so custody by the broker is durable. This is custody, not acceptance (FW-9).
+- **Reconciliation.** The adapter records each Collector receipt (FW-19). A producer that wrote to the topic reconciles by receipt lookup (§12.4) with an identity that holds the receipt scope and receipt-read permission for its `producer_id`. A `404` within the replay retention period means not yet accepted, and the record stays in the topic until it is accepted or its retention ends.
 - **Consumer adapter.** Read, batch into a single-producer batch (or mixed batches if the Collector advertises support), submit, and commit the consumer offset only after every record in the batch has an acceptance or a terminal rejection that has been written to a dead-letter destination (FW-13).
 - **Dead letter.** Write each terminally rejected record, with its Problem Details `code`, `record_id`, and `content_digest`, to a dead-letter topic with restricted access (FW-12). Do not drop it. Records for `retryable: true` outcomes stay in the main flow with backoff.
 - **Retention.** Set topic retention longer than the longest tolerated Collector outage, so an outage cannot discard unacknowledged evidence.
