@@ -791,7 +791,7 @@ Response `200` (also for negative verdicts; the verdict is the payload):
   "verifier": "https://sharedeus.eus.attest.azure.net",
   "verifier_result_digest": "sha256:…",
   "reasons": [],
-  "trace_record_id": "rec_01J…"
+  "trace_record_id": "01J9Z3K5A1B2C3D4E5F6G7H8J9"
 }
 ```
 
@@ -2567,7 +2567,14 @@ choice**, not a default:
   GovOps-specific field names, not the architecture here.
 
 The profiles are **never mixed in one record**: every record this plan emits carries
-`tag:jans.io,2026:trace-v1` and nothing else.
+`tag:jans.io,2026:trace-v1` and nothing else. The Collector API
+(`govops-trace-collector-api.md`) lets a Collector list several profiles in its `trace_profiles`
+metadata, each with its own suite, and Lock lists both tags while producers migrate. The producer
+reads that metadata (`/.well-known/govops-trace-configuration`) and emits a tag the Collector
+lists. Both tags use the same suite (Ed25519, RFC 8785, SHA-256, `govops-trace-profile.md` §15), so
+moving to the GovOps tag changes the tag and no cryptography. `record_id` is a lowercase UUID or an
+uppercase ULID, compared as an exact string (profile §1), and the first record of each chain
+carries the genesis sentinel `sha256:` followed by 64 zeros.
 
 Under that profile: event kinds `AUTHORIZATION_DECISION`,
 `CAPABILITY_INVOKED`, `RUNTIME_EFFECT`, `CREDENTIAL_PROVISIONED`, `EXECUTION_STARTED`; envelope
@@ -2577,7 +2584,7 @@ API). Records are signed with **dedicated Ed25519 producer keys** (not the OIDC 
 keys are to be registered and revoked in Lock's registry, with revocation anchored to chain
 position). jans-auth-server registers **two** such producer identities and keys — one per role (see
 the next subsection) — and each node keeps a separate chain per role (`producer_instance_id` = node
-id, monotonic `sequence_number`, `prev_record_hash`, zero hash first).
+id, monotonic `sequence_number`, `prev_record_hash`, genesis sentinel `sha256:` + 64 zeros at position 1).
 
 #### Two producer roles, two keys — the Auth Server does not sign credential-provisioning evidence under its authentication key
 
@@ -2599,8 +2606,7 @@ Instead, credential provisioning is a **separate role with its own key**, matchi
 discipline (the same reason a PDP and a co-located PEP sign with different keys). The two roles may
 run in the same process and even on the same node; they are distinct *producers* because they hold
 distinct, separately-authorized keys and chains. Each role keeps its own chain
-(`producer_instance_id` = node id, monotonic `sequence_number`, `prev_record_hash`, zero hash
-first); the two chains are independent.
+(`producer_instance_id` = node id, monotonic `sequence_number`, `prev_record_hash`, genesis sentinel `sha256:` + 64 zeros at position 1); the two chains are independent.
 
 ```mermaid
 flowchart LR
@@ -2785,7 +2791,7 @@ SVID issuance record (`CREDENTIAL_PROVISIONED`; the attestation verdict is the p
 {
   "producer": "jans-svid-issuer",
   "kid": "jans-svid-issuer-trace-2026q4",
-  "record_id": "rec_01J9…",
+  "record_id": "01J9Z3K8M2Q7R5T1V4W6X8Y0AB",
   "trace": {
     "eat_profile": "tag:jans.io,2026:trace-v1",
     "event_kind": "CREDENTIAL_PROVISIONED",
@@ -2842,9 +2848,9 @@ SVID issuance record (`CREDENTIAL_PROVISIONED`; the attestation verdict is the p
     "prev_record_hash": "sha256:…"
   },
   "parent_record_ids": [
-    { "producer_id": "jans-svid-issuer", "record_id": "rec_attest…", "relationship_type": "attested_by" },
-    { "producer_id": "jans-svid-issuer", "record_id": "rec_enroll…", "relationship_type": "enrolled_as" },
-    { "producer_id": "jans-auth", "record_id": "rec_idjag…", "relationship_type": "delegated_by" }
+    { "producer_id": "jans-svid-issuer", "record_id": "01J9Z3K5A1B2C3D4E5F6G7H8J9", "relationship_type": "attested_by" },
+    { "producer_id": "jans-svid-issuer", "record_id": "01J9Z3K6M4N5P7Q8R9S0T1V2W3", "relationship_type": "enrolled_as" },
+    { "producer_id": "jans-auth", "record_id": "01J9Z3K7X1Y2Z3A4B5C6D7E8F9", "relationship_type": "delegated_by" }
   ],
   "signature": "…"
 }
@@ -2905,7 +2911,7 @@ New package `io.jans.as.server.trace`:
   conformance bar Lock's own ingestion is held to, so a record this producer signs and a record
   Lock verifies canonicalize and digest identically. "Move Lock's `JcsCanonicalizer`" is therefore
   *not* the plan: the plan is to **depend on `jans-trace-core`** (or prove vector-identical output),
-  so there is one canonical implementation, not two that can drift. The builder selects the
+  so there is one canonical implementation, not two that can drift. The Producer class of the Collector API's conformance suite (`conformance/vectors.json`, signed Ed25519 vectors for `tag:govops.owasp.org,2026:trace-v1`) is a second bar: a producer signs the same bytes and digests those vectors expect. The builder selects the
   producer key by **role**: the
   `jans-svid-issuer` key alias (`trace-svid-issuer`) for `CREDENTIAL_PROVISIONED` records, and the
   `jans-auth` key alias (`trace-producer`) for the `EXECUTION_STARTED` bootstrap (and, in the
@@ -3029,8 +3035,16 @@ each incomplete state resolves to. The outbox is the single source of truth for 
 exist, and a record is matched to an operation only by its recorded `operation_id`.
 - `TraceEmitter`: durable outbox (`jansTraceOutbox`) + timer posting to Lock's planned
   `POST /api/v1/audit/trace` ingestion endpoint (a Lock dependency, not a current endpoint — see
-  section 11.1) with a `trace.write` client-credentials token from this server; retry with backoff;
-  never drops silently. `traceEmissionMode=inline` posts before the HTTP response (demo mode) — but
+  section 11.1) with a `trace.write` client-credentials token from this server; discovers the endpoint
+  through the Collector's `/.well-known/govops-trace-configuration`; never drops silently. Retry
+  follows the Collector API (§10.3, §8.5): the same stored bytes every time, jittered exponential
+  backoff, `Retry-After` honored, no unchanged retry of a response whose error has
+  `retryable: false` (the entry becomes a terminal rejection for an operator), and `409` is
+  terminal. Because the outbox holds unacknowledged records in durable storage until a receipt or
+  terminal rejection arrives, it also meets the Collector API's durable-retention recommendation
+  (§10.3). The longest a record can wait (`traceOutboxMaxAgeSeconds` plus the maximum retry
+  backoff) stays below the Collector's published `idempotency_retention_seconds`, so a late delivery
+  is still recognized as a replay (§9.4); the emitter alerts when it approaches that bound. `traceEmissionMode=inline` posts before the HTTP response (demo mode) — but
   only after the commit point, never before (the staging rule in the durability subsection applies
   to both modes).
 
@@ -3137,7 +3151,7 @@ transaction as the `operation_id`-keyed `IssuanceLog` and the `staged → commit
 | **Commit** and **Resolve-abort** are **two competing atomic transitions on the one `jansTraceOutbox` operation row**, each a `WHERE state='staged' AND fence=:expected` conditional update — exactly one wins. | **Commit:** one SQL transaction in the issuer-side domain (all tables in one `jans-orm` SQL database): persist the entity with its `operation_id` + `record_id` receipt (`TokenEntity` / `Client`+`KeyEnrollment` / `AttestationAssessment`+`KeyAttestationState`), write the `operation_id`-keyed `IssuanceLog`, and flip `staged → committed` **conditioned on `state='staged' AND fence` unchanged** | The entry is `staged` and its `fence` is the writer's `fenceToken` | Entity, `IssuanceLog`, and `committed` flip are durable together or not at all; the conditional flip is what makes it a *competing* transition — if recovery's cancel landed first, `fence` changed and this whole transaction rolls back | Probe the `operation_id`-keyed `IssuanceLog`: **present** → the entry is (or becomes) `committed` |
 | | **Resolve-abort:** one transaction that flips `staged → aborted` **conditioned on `state='staged' AND fence=:oldFence`, bumping `fence` in the same update** (cancel and flip are one atomic step, not "cancel, then flip") | Entry `staged`; `operation_id`-keyed `IssuanceLog` absent **past `resolutionWaitSeconds`** | The position is terminally `aborted`, and because the fence bump is atomic with the flip, a Commit transaction racing it either committed first (then Resolve-abort's `WHERE state='staged'` fails and it is a no-op) or loses (its `fence` precondition now fails and it rolls back) — the two cannot both land | Idempotent: re-running finds the entry already `aborted`, or already `committed` if Commit won the race |
 | **Finalize-and-sign** | **Freeze** the complete signing input the first time the entry is finalized — the canonical record (resolved `operation_outcome` with the per-(kind, subtype) identifying artifact of §11.2, `sequence_number`, `prev_record_hash` over *n-1*'s **durably finalized** `content_digest`) **plus every otherwise-generated field**: `signed_at`, the selected signing `kid`, and any nonce — persisting that frozen input on the entry. Sign it and **atomically install the resulting bytes once** via a CAS that sets `signed_bytes` only if still unset. A finalizer that loses the CAS (concurrent or post-crash retry) **adopts the stored winner's bytes** and does not re-sign | The entry is resolved (`committed` or `aborted`) and *n-1* is **finalized** (its `content_digest` durable) — **not** necessarily *delivered* | **One authoritative byte sequence** on the entry — not necessarily one execution of the signer | Re-finalizing re-reads the **frozen** input (so `signed_at`/`kid` do not drift) or, if bytes are already installed, adopts them; either way the stored bytes are unchanged |
-| **Deliver** | Post the stored signed bytes to Lock in `sequence_number` order; mark `delivered` on `202` or idempotent replay | The entry is finalized and its predecessors are **delivered** | The record is at Lock; retries re-send identical bytes | At-least-once; Lock is keyed by `record_id`, so a retry is idempotent. A `409` (same `record_id`, different content) is an error — it cannot arise from a retry |
+| **Deliver** | Post the stored signed bytes to Lock in `sequence_number` order; mark `delivered` on `201` (first acceptance), `200` (idempotent replay), or `202` from a Collector that has not yet adopted the Collector API status codes | The entry is finalized and its predecessors are **delivered** | The record is at Lock; retries re-send identical bytes | At-least-once; Lock is keyed by `record_id`, so a retry is idempotent. A `409` (same `record_id`, different content) is an error — it cannot arise from a retry |
 
 Returning the HTTP response to the agent is **not** a transition in this table: the server cannot
 observe whether the agent received it, so no record ever claims delivery to the client — a
@@ -3278,7 +3292,7 @@ publishes an agentrust record for a run reads one Lock execution and fills: `sub
 `tool_transcript.hash` ← digest over the ordered `CAPABILITY_INVOKED` records;
 `references[rel=authorized-intent]` ← the PDP decision record; `references[rel=approval-outcome]`
 ← the ID-JAG (`jti`, IdP as resolver); `delegation.credential_id` ← the ID-JAG `jti` (read from the access-controlled TRACE evidence, which holds the raw `jti` — **not** from an SVID, whose `credential_ref` is a per-audience opaque value, §10.5);
-`transparency` ← Lock receipt URI. Export concern, not auth-server code; listed so the demo can
+`transparency` ← the Lock receipt (`receipt_id`, `received_at`, and the receipt lookup endpoint when Lock offers it, Collector API §7.3.1). Export concern, not auth-server code; listed so the demo can
 show both views from one set of facts.
 
 ### 11.5 Capability resolution is Lock-derived, never signed
@@ -3500,7 +3514,11 @@ or implied. Each is normative for a production deployment; a demo MAY relax the 
   credential, not a signing key).
 - **Rotation.** Bundle/SVID signing keys rotate with an overlap window (old + new served, section
   8); TRACE producer keys rotate via Lock's producer-key admin path with an `IDENTITY_ROTATED`
-  record; the agent key `K` rotates old-key-authorized (section 9.9). Each rotation is independent.
+  record, and the **old key stays valid at Lock until every record signed under its `kid` has been
+  delivered**, because Lock evaluates key validity at its own acceptance time and not at `signed_at`
+  (Collector API §4.5.1), and the outbox freezes `kid` at finalization (§11.3), so a record queued
+  during an outage and delivered after the old key's `valid_until` would be rejected with
+  `KEY_NOT_VALID`; the agent key `K` rotates old-key-authorized (section 9.9). Each rotation is independent.
 - **Compromise response, and the revocation delay it does *not* beat.** A compromised SVID signing
   key is removed from the bundle immediately. **Removal is not instantaneous revocation at
   verifiers.** A relying party verifies an SVID against its *cached* copy of the bundle, so it keeps
