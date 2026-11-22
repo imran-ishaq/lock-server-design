@@ -1,0 +1,1120 @@
+{
+ "artifact": "govops-trace-collector-vectors",
+ "version": "1",
+ "profile": "tag:govops.owasp.org,2026:trace-v1",
+ "notice": "Test keys only. The seeds are published on purpose. Never register these keys outside a test deployment.",
+ "keys": {
+  "pdp-fleet-1/key-2026-01": {
+   "producer_id": "pdp-fleet-1",
+   "kid": "key-2026-01",
+   "seed_hex": "ccb2538fd1c9bbc2a2d034662c4a220387c7a4eb62d3cfd3582a0e0aa183adcc",
+   "public_jwk": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "osMws01rURBEOGoaCDB5eFcNt7qw6sgH4y-ty1_WZ5A"
+   }
+  },
+  "payments-gateway-pep/pep-key-2026-01": {
+   "producer_id": "payments-gateway-pep",
+   "kid": "pep-key-2026-01",
+   "seed_hex": "b26864e6c1d517b2527e68873aad0c2ab04507b8022c6df52b19ee342055b3d7",
+   "public_jwk": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "hQZQSp0mtUu3bMyZ_DEH5rJ_rPLyOtpOAniT2swqaD8"
+   }
+  },
+  "pdp/fleet 1/key-sl-01": {
+   "producer_id": "pdp/fleet 1",
+   "kid": "key-sl-01",
+   "seed_hex": "b906e232bcf65ca1ccefc4ef55a1ac936b9b7ed488537b6049a8d3395b606440",
+   "public_jwk": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "_X0MOS5dRVOYHCbzljFrtsZ7YprvnIcRz0tuHkHVwYs"
+   }
+  }
+ },
+ "seed_derivation": "seed = SHA-256 of the ASCII label 'govops-trace-collector-test/<producer_id>/<kid>'",
+ "vectors": {
+  "V-01": {
+   "id": "V-01",
+   "description": "Valid AUTHORIZATION_DECISION, genesis of chain chain-pdp-001-a, execution exec-123.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226",
+   "signature_valid": true
+  },
+  "V-02": {
+   "id": "V-02",
+   "description": "Valid AUTHORIZATION_DECISION, chain position 2 (prev_record_hash is V-01's digest), DENY, execution exec-124.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b1f-7d3b-8e52-4b3a8c1d0e52",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138600,
+     "trace_execution_id": "exec-124",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "DENY"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 2,
+     "prev_record_hash": "sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226"
+    },
+    "parent_record_ids": [],
+    "signature": "Hc-B-e4FnlHykEQQrVUAdRh2GGjcsFsuyGdYpoP_FD4rZAH28wmh_k0lUBo9l5NCt0QX6IhBfRtU-ZHC7U3CCg"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:ad48f69db6bf6f789871edf3dfe48f340174d9a30217cd2789f8a0e043c0ea00",
+   "signature_valid": true
+  },
+  "V-03": {
+   "id": "V-03",
+   "description": "Valid CAPABILITY_INVOKED from payments-gateway-pep, with an authorized parent edge to V-01.",
+   "kind": "record",
+   "content": {
+    "producer": "payments-gateway-pep",
+    "kid": "pep-key-2026-01",
+    "record_id": "0191f3a0-7b20-7e4c-9f63-5c4b9d2e1f63",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "CAPABILITY_INVOKED",
+     "signed_at": 1781138543,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "invocation": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "SUCCESS"
+      },
+      "enforcement_point_id": "payments-gateway-01"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "payments-gateway-pep",
+     "producer_instance_id": "payments-gateway-01",
+     "producer_chain_id": "chain-pep-01",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [
+     {
+      "producer_id": "pdp-fleet-1",
+      "record_id": "0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41",
+      "relationship_type": "authorized"
+     }
+    ],
+    "signature": "q9dnOcAHXqAJ4pdTfvLghlvqgCWZlJD0vzuostJ702mogKd6xBC5Oml68FzV1otp85MXoa6VmlFLf0KnfkYQAw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:524391ac77a07ec35546d909f6c409c719fb25e52645c5cccb0332001a830259",
+   "signature_valid": true
+  },
+  "V-04": {
+   "id": "V-04",
+   "description": "Valid record whose token issuer contains non-ASCII characters. Genesis of unregistered chain chain-pdp-001-u.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b2a-72e6-93ad-06e5d9c2b3ad",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org/café/🔒",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-u",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "IK-jMuQaJKkbYLbrrPxPUm8Oc9zZtaAx10PNzSvVr-YOK_8_nHYrzA5rjJIAaaizJcjkUBvCZ4zBDUB5xpx0Bw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:08c257582502a1aaf4ebe4998f0825d7e1cebf4719df025f7eca524ee96ec3f8",
+   "signature_valid": true
+  },
+  "V-05": {
+   "id": "V-05",
+   "description": "Valid record with a signed top-level evidence_domain_id of D2. Chain chain-pdp-001-d.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b2b-73f7-84be-17f6ead3c4be",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-d",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "evidence_domain_id": "D2",
+    "signature": "ie6m4ml8UN9b4WfMOI0_e4g0mU0V0GlsuPR3O4DmMr87GLBfRMFXd95F2WROsVC6R7NLQD7aquHlz5Xg2AieBw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:9b551c0889228cc656dc1c06774109db1280a2d00cc504b678ac9aeaafdb3703",
+   "signature_valid": true
+  },
+  "V-06": {
+   "id": "V-06",
+   "description": "V-01 re-serialized: top-level members reversed, 4-space indent. Same content_digest as V-01.",
+   "kind": "raw_text",
+   "content": "{\n    \"signature\": \"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw\",\n    \"parent_record_ids\": [],\n    \"producer_chain\": {\n        \"producer_id\": \"pdp-fleet-1\",\n        \"producer_instance_id\": \"pdp-001\",\n        \"producer_chain_id\": \"chain-pdp-001-a\",\n        \"sequence_number\": 1,\n        \"prev_record_hash\": \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n    },\n    \"trace\": {\n        \"eat_profile\": \"tag:govops.owasp.org,2026:trace-v1\",\n        \"event_kind\": \"AUTHORIZATION_DECISION\",\n        \"signed_at\": 1781138542,\n        \"trace_execution_id\": \"exec-123\",\n        \"execution_authority\": \"payments-gateway\",\n        \"subject\": {\n            \"workload_id\": \"spiffe://example.org/service/payments-gateway\"\n        },\n        \"event\": {\n            \"decision\": {\n                \"action\": \"Acme::Action::\\\"ApprovePayment\\\"\",\n                \"resource_type\": \"Acme::Payment\",\n                \"outcome\": \"ALLOW\"\n            },\n            \"tokens\": [\n                {\n                    \"issuer\": \"https://accounts.example.org\",\n                    \"token_type\": \"access_token\",\n                    \"jti\": \"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e\"\n                }\n            ]\n        },\n        \"policy\": {\n            \"policy_store_id\": \"https://example.org/policy-stores/payments\",\n            \"policy_store_version\": \"1.2.3\",\n            \"policy_language\": \"cedar\",\n            \"policy_language_version\": \"4.4.0\",\n            \"bundle_hash\": \"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928\"\n        },\n        \"runtime\": {\n            \"pdp_id\": \"pdp-001\"\n        }\n    },\n    \"record_id\": \"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41\",\n    \"kid\": \"key-2026-01\",\n    \"producer\": \"pdp-fleet-1\"\n}",
+   "strict_json": true,
+   "content_digest": "sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226",
+   "canonical_equivalent_of": "V-01",
+   "signature_valid": true
+  },
+  "V-10": {
+   "id": "V-10",
+   "description": "V-01 with decision.outcome changed after signing.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "DENY"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:18d3299c8687ec745d31e2d623fccdeaa4943a14324040e010a4877a41daccdc",
+   "signature_valid": false
+  },
+  "V-11": {
+   "id": "V-11",
+   "description": "Correctly signed; kid key-unknown is not registered.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-unknown",
+    "record_id": "0191f3a0-7b23-7b7f-8c96-8f7ec25b4c96",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "k5HalDC95uWVrZWsnFS4UoXftCn6HsJX80scg8KJmbgM60BFPkD4qAlYhqgnoeF0VNUfB7RdGyFBj9VfFcbuDQ"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:43fa6feb87e21d6fae0995203e66c9da95e2db97376e201c99d7222effae36ff",
+   "signature_valid": true
+  },
+  "V-12": {
+   "id": "V-12",
+   "description": "CAPABILITY_INVOKED signed by the key authorized only for AUTHORIZATION_DECISION.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b24-7c80-9da7-a08fd36c5da7",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "CAPABILITY_INVOKED",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "invocation": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "SUCCESS"
+      },
+      "enforcement_point_id": "payments-gateway-01"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "yzUFvKyF8UB-SCEht9Bs74o9o3rDPK44ki3a9ycSbjL6PhOx8aK1FarK2axdVxRuX68S4V4ex5NtSFBere7QCA"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:2ca30e9dfb43324e0b05bc400928f3e8a867cad7fbfa76e06e2992b15a21a5d1",
+   "signature_valid": true
+  },
+  "V-13": {
+   "id": "V-13",
+   "description": "Correctly signed; producer is pdp-fleet-2 while producer_chain.producer_id is pdp-fleet-1.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-2",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b25-7d91-8eb8-b190e47d6eb8",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "LK7wACQiOCiPGyJ9SIJvljZzwJCwCe0RutFzZ3mRocG6F3uayAlSL5XTV0VZGxWfsEbZ7p9csvI2Uf5VwHb4CQ"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:6af9f01925b9393370ca355dad6e77eb51b0ebd35b17bf3c4f1df002a895c6dc",
+   "signature_valid": true
+  },
+  "V-14": {
+   "id": "V-14",
+   "description": "Correctly signed AUTHORIZATION_DECISION without trace.execution_authority.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b26-7ea2-9fc9-c2a1f58e7fc9",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "wan8V-vehv0pTrWTML4QUpWxrDXLmwbs1Ci8ejD6TKLwKnRuSj3QIgvCBpEARWFmKK2d81_p9Cb5UY0oNW3fBg"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:6af35ff77ffe05568317668070f0cee36b97acb7524a1fdaad8f66a1e3ceccc5",
+   "signature_valid": true
+  },
+  "V-15": {
+   "id": "V-15",
+   "description": "Correctly signed; trace.eat_profile is not a listed profile.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b27-7fb3-80da-d3b2a69f80da",
+    "trace": {
+     "eat_profile": "tag:example.com,2026:other-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "AgxaodM3BzpGI81G5XRugRqM88t6GFJclk-tccCGymQCyjxG3tKZBQrhKmkVKCUgSx0I2EiioqvPZsvp-dWmAw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:af480fa986d20ef421743345cb98a3931d69636a90b683ef7ac790a17e1de77a",
+   "signature_valid": true
+  },
+  "V-16": {
+   "id": "V-16",
+   "description": "V-01 with == appended to signature.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw=="
+   },
+   "strict_json": true,
+   "content_digest": "sha256:7d389becea1c9c863b895307d0eca3b70c9adacc3192f0230fbea283771e1155",
+   "signature_valid": false
+  },
+  "V-17": {
+   "id": "V-17",
+   "description": "Correctly signed; record_id is payment-42.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "payment-42",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "yskjUWBEiA6JUq6a2IOJTXyG0xPSIZTGaYb3DeNtedxL9Vr_uz8GRLEhBSCTpKYqsS1B1ThA16fjPZyVjesXBg"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:3e46557e098e0d8c0e6e391bd8bc3dacf039e1584187baf951d6df18a90514f4",
+   "signature_valid": true
+  },
+  "V-18": {
+   "id": "V-18",
+   "description": "Raw text of V-01 with an extra leading record_id member (duplicate member name).",
+   "kind": "raw_text",
+   "content": "{\"record_id\":\"0191f3a0-7b28-70c4-91eb-e4c3b7a091eb\",\"kid\":\"key-2026-01\",\"parent_record_ids\":[],\"producer\":\"pdp-fleet-1\",\"producer_chain\":{\"prev_record_hash\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"producer_chain_id\":\"chain-pdp-001-a\",\"producer_id\":\"pdp-fleet-1\",\"producer_instance_id\":\"pdp-001\",\"sequence_number\":1},\"record_id\":\"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41\",\"signature\":\"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw\",\"trace\":{\"eat_profile\":\"tag:govops.owasp.org,2026:trace-v1\",\"event\":{\"decision\":{\"action\":\"Acme::Action::\\\"ApprovePayment\\\"\",\"outcome\":\"ALLOW\",\"resource_type\":\"Acme::Payment\"},\"tokens\":[{\"issuer\":\"https://accounts.example.org\",\"jti\":\"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e\",\"token_type\":\"access_token\"}]},\"event_kind\":\"AUTHORIZATION_DECISION\",\"execution_authority\":\"payments-gateway\",\"policy\":{\"bundle_hash\":\"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928\",\"policy_language\":\"cedar\",\"policy_language_version\":\"4.4.0\",\"policy_store_id\":\"https://example.org/policy-stores/payments\",\"policy_store_version\":\"1.2.3\"},\"runtime\":{\"pdp_id\":\"pdp-001\"},\"signed_at\":1781138542,\"subject\":{\"workload_id\":\"spiffe://example.org/service/payments-gateway\"},\"trace_execution_id\":\"exec-123\"}}",
+   "strict_json": false,
+   "signature_valid": null
+  },
+  "V-20": {
+   "id": "V-20",
+   "description": "Same identity as V-01, different signed_at, correctly re-signed.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138999,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "Ij2gOeVkH_zlI2MPO1AkTkZ52JqGB4gpI6WpYsFueb3u2mKRahIqSZrAPpyypQkTBz78J28AQOSFlHdLGVvIAQ"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:2c92043b1d3c70516d452af46d7987c22701fb4b81133e8f92b4c6e83aa92e99",
+   "signature_valid": true
+  },
+  "V-21": {
+   "id": "V-21",
+   "description": "Different record_id, same chain position as V-01, DENY, correctly signed.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b21-7f5d-8a74-6d5ca03f2a74",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "DENY"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "2kT-JgZ7Gr9yu-X79ZG-noGZ49ZqtiFwvk_8sZbco4oAKsoG5d36oukQar5n7jYbQWPk_Wr6ITmnFop_2H2WCA"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:e634e8fbca1417a231b2d0db0f6fd963912624bf820bab5d38f54041ffdaeb88",
+   "signature_valid": true
+  },
+  "V-22": {
+   "id": "V-22",
+   "description": "Chain chain-pdp-001-a position 2, prev_record_hash is sha256 of 64 a, correctly signed.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b22-7a6e-9b85-7e6db14a3b85",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 2,
+     "prev_record_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "parent_record_ids": [],
+    "signature": "IgZ05ki7o51YxBc0KUS3o_NkRqeOFGSt-P9Hl1pcHtkFgajFD9vnjEYCY9B6DJnIHrYNB45HZxVCoT5KIM1TBg"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:b766ca6d5cffc7bd574dbe41c27d980e375349038bde7ae338261877f2b24be6",
+   "signature_valid": true
+  },
+  "V-23": {
+   "id": "V-23",
+   "description": "Chain chain-pdp-001-a position 2 carrying the genesis sentinel, correctly signed.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b2c-74a8-95cf-28a7fbe4d5cf",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a",
+     "sequence_number": 2,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "ovtdvERIBlDQtiP0goIzMQ_5Sp86hz1w-RKnj6dUO917w4N2_hfNzyTtRO48yb98K4HP08KSDQP-Sbz6xvXGBw"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:7ff0a3bfed8237ab450492bda7f6015e63372f963e32729fe82e4f2add60826b",
+   "signature_valid": true
+  },
+  "V-24": {
+   "id": "V-24",
+   "description": "Unregistered chain chain-pdp-001-x position 3, correctly signed.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b2d-75b9-86d0-39b80cf5e6d0",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-x",
+     "sequence_number": 3,
+     "prev_record_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "parent_record_ids": [],
+    "signature": "DbCk-MzMZGTau2rwmFxczgh7jIwFDL5w0aFaCsiNxLnZNpveKTa1JiqGMNfFo_VWNWn5TVgUVCX2TEnWnpGOCQ"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:ea21a940266e5ba7db4909276fd5b6e9ed1dd5d0adebdb18d2ba689d68636c08",
+   "signature_valid": true
+  },
+  "V-25": {
+   "id": "V-25",
+   "description": "Correctly signed record that has no trace member. Chain chain-pdp-001-n.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp-fleet-1",
+    "kid": "key-2026-01",
+    "record_id": "0191f3a0-7b2e-76ca-97e1-4ac91d06f7e1",
+    "producer_chain": {
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-n",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "Bz2v9QBKqeomJg92Gp0n56p-lEtH5-DyNdyNabLOR6Hu0zHBUsYO4VgB_2VZTVLvYOaaPKX5KLmab8fYz4BTBA"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:0daef1c498d31f720654cecf260a178dadd026f2b21ea425c97f55fc1f2e840a",
+   "signature_valid": true
+  },
+  "V-26": {
+   "id": "V-26",
+   "description": "Valid record from producer 'pdp/fleet 1' (reserved characters in producer_id), key key-sl-01.",
+   "kind": "record",
+   "content": {
+    "producer": "pdp/fleet 1",
+    "kid": "key-sl-01",
+    "record_id": "0191f3a0-7b2f-77db-88f2-5bda2e1708f2",
+    "trace": {
+     "eat_profile": "tag:govops.owasp.org,2026:trace-v1",
+     "event_kind": "AUTHORIZATION_DECISION",
+     "signed_at": 1781138542,
+     "trace_execution_id": "exec-123",
+     "execution_authority": "payments-gateway",
+     "subject": {
+      "workload_id": "spiffe://example.org/service/payments-gateway"
+     },
+     "event": {
+      "decision": {
+       "action": "Acme::Action::\"ApprovePayment\"",
+       "resource_type": "Acme::Payment",
+       "outcome": "ALLOW"
+      },
+      "tokens": [
+       {
+        "issuer": "https://accounts.example.org",
+        "token_type": "access_token",
+        "jti": "9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"
+       }
+      ]
+     },
+     "policy": {
+      "policy_store_id": "https://example.org/policy-stores/payments",
+      "policy_store_version": "1.2.3",
+      "policy_language": "cedar",
+      "policy_language_version": "4.4.0",
+      "bundle_hash": "sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"
+     },
+     "runtime": {
+      "pdp_id": "pdp-001"
+     }
+    },
+    "producer_chain": {
+     "producer_id": "pdp/fleet 1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-sl-01",
+     "sequence_number": 1,
+     "prev_record_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "parent_record_ids": [],
+    "signature": "HxFMsIlLwXmyihK9FwcWpwgAEBeaRCxHtMKm6vphr6KXK7wovpKz99q2kxaW9Cf2kKkh9YX4VsfzVi4J5HvYCA"
+   },
+   "strict_json": true,
+   "content_digest": "sha256:896a49db43047eae11ff5a408faf10d7267ce83407a15d8e76ac417a386ae88c",
+   "signature_valid": true
+  }
+ },
+ "signing_input_V-01": "{\"kid\":\"key-2026-01\",\"parent_record_ids\":[],\"producer\":\"pdp-fleet-1\",\"producer_chain\":{\"prev_record_hash\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"producer_chain_id\":\"chain-pdp-001-a\",\"producer_id\":\"pdp-fleet-1\",\"producer_instance_id\":\"pdp-001\",\"sequence_number\":1},\"record_id\":\"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41\",\"trace\":{\"eat_profile\":\"tag:govops.owasp.org,2026:trace-v1\",\"event\":{\"decision\":{\"action\":\"Acme::Action::\\\"ApprovePayment\\\"\",\"outcome\":\"ALLOW\",\"resource_type\":\"Acme::Payment\"},\"tokens\":[{\"issuer\":\"https://accounts.example.org\",\"jti\":\"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e\",\"token_type\":\"access_token\"}]},\"event_kind\":\"AUTHORIZATION_DECISION\",\"execution_authority\":\"payments-gateway\",\"policy\":{\"bundle_hash\":\"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928\",\"policy_language\":\"cedar\",\"policy_language_version\":\"4.4.0\",\"policy_store_id\":\"https://example.org/policy-stores/payments\",\"policy_store_version\":\"1.2.3\"},\"runtime\":{\"pdp_id\":\"pdp-001\"},\"signed_at\":1781138542,\"subject\":{\"workload_id\":\"spiffe://example.org/service/payments-gateway\"},\"trace_execution_id\":\"exec-123\"}}"
+}

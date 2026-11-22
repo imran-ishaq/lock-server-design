@@ -1,0 +1,5688 @@
+{
+ "artifact": "govops-trace-collector-requirements",
+ "version": "1",
+ "id_scheme": "<AREA>-<NNN> for requirements found in the text, <AREA>-<letter><n> for requirements that the text states without an RFC 2119 keyword (tables, lists). FW-n and CO-n keep their original identifiers. An identifier is never reused and never renumbered.",
+ "levels": {
+  "mandatory": "MUST, MUST NOT, SHALL, REQUIRED, or a normative table row or list item",
+  "recommended": "SHOULD, RECOMMENDED",
+  "optional": "MAY, OPTIONAL"
+ },
+ "verification": {
+  "test": "verified by an API test against a Collector",
+  "behavior": "verified by a behavioral test of a producer or forwarder",
+  "inspection": "verified by inspection of documentation, configuration, or code",
+  "advisory": "guidance to operators or consumers; not verified"
+ },
+ "requirements": [
+  {
+   "id": "SCP-001",
+   "section": "1.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "the internal receipt chain, checkpoints, or external anchoring (a Collector MAY expose one, see \u00a76.3);",
+   "anchor": "kpoints, or external anchoring (a Collector MAY expose one, see \u00a76.3);",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCP-002",
+   "section": "1.3",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "REST is the canonical Collector submission interface, but a producer MAY carry a signed record through an intermediary (OTLP, Kafka, or another broker).",
+   "anchor": "igned record through an intermediary (OTLP, Kafka, or another broker).",
+   "origin": "sentence"
+  },
+  {
+   "id": "OVR-001",
+   "section": "3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY be deployed under a path prefix; the endpoints it serves are then the URLs published in its metadata (\u00a711), and clients MUST use those URLs instead of constructing them.",
+   "anchor": "a (\u00a711), and clients MUST use those URLs instead of constructing them.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TRN-001",
+   "section": "4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Every request to the ingestion endpoints MUST use TLS.",
+   "anchor": "Every request to the ingestion endpoints MUST use TLS.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TRN-002",
+   "section": "4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT serve them over cleartext HTTP and MUST NOT redirect a cleartext request to HTTPS for an ingestion endpoint (the access token would already have been exposed).",
+   "anchor": "ingestion endpoint (the access token would already have been exposed).",
+   "origin": "sentence"
+  },
+  {
+   "id": "TRN-003",
+   "section": "4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "A Collector MUST support TLS 1.2 or later and SHOULD support TLS 1.3 (RFC 8446).",
+   "anchor": "r MUST support TLS 1.2 or later and SHOULD support TLS 1.3 (RFC 8446).",
+   "origin": "sentence"
+  },
+  {
+   "id": "TRN-004",
+   "section": "4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "It MUST NOT negotiate SSL 3.0, TLS 1.0, or TLS 1.1.",
+   "anchor": "It MUST NOT negotiate SSL 3.0, TLS 1.0, or TLS 1.1.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TRN-005",
+   "section": "4.1",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "Clients MUST validate the Collector's certificate chain and host name.",
+   "anchor": "Clients MUST validate the Collector's certificate chain and host name.",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-001",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A request to an ingestion endpoint MUST carry an OAuth 2.0 access token.",
+   "anchor": "request to an ingestion endpoint MUST carry an OAuth 2.0 access token.",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-002",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Tokens MUST NOT be accepted in a URI query parameter or in the request body.",
+   "anchor": " MUST NOT be accepted in a URI query parameter or in the request body.",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-003",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A conforming Collector MUST support, at a minimum:",
+   "anchor": "**A conforming Collector MUST support, at a minimum:**",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-004",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST reject a token whose alg is none or a symmetric algorithm, and MUST NOT fetch keys from a jku, x5u, or jwk header parameter.",
+   "anchor": "nd MUST NOT fetch keys from a `jku`, `x5u`, or `jwk` header parameter.",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-005",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A token that carries a confirmation (cnf) claim MUST NOT be accepted as a plain bearer token.",
+   "anchor": "nfirmation (`cnf`) claim MUST NOT be accepted as a plain bearer token.",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-006",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "introspection",
+   "verification": "test",
+   "statement": "A Collector MAY also support: opaque access tokens validated by token introspection (RFC 7662) (and MUST, if it lists an authorization server with token_format: \"introspection\"); DPoP-bound tokens (RFC 9449); and certificate-bound tokens (RFC 8705).",
+   "anchor": "DPoP-bound tokens (RFC 9449); and certificate-bound tokens (RFC 8705).",
+   "origin": "sentence"
+  },
+  {
+   "id": "AUT-007",
+   "section": "4.2.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "For forwarders, which hold credentials that can submit for many producers, asymmetric client authentication (private_key_jwt, RFC 7523, or tls_client_auth, RFC 8705) is RECOMMENDED over a shared secret.",
+   "anchor": ", or `tls_client_auth`, RFC 8705) is RECOMMENDED over a shared secret.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-001",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A submitter identity MUST be scoped to its issuing authorization server.",
+   "anchor": "submitter identity MUST be scoped to its issuing authorization server.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-002",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "client_id alone MUST NOT identify a submitter, bind an evidence domain, or grant any permission.",
+   "anchor": "dentify a submitter, bind an evidence domain, or grant any permission.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-003",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "A Collector MUST NOT concatenate the pair into one string unless the encoding is unambiguous (for example a JSON array, or length-prefixed components).",
+   "anchor": "unambiguous (for example a JSON array, or length-prefixed components).",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-004",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Derivation. The Collector MUST derive the submitter identity from the validated claims of the access token, or from an authenticated introspection response, according to the documented token profile of the authorization server that issued it.",
+   "anchor": "e documented token profile of the authorization server that issued it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-005",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| JWT access token (token_format: \"jwt\") | The validated iss claim. It MUST be exactly one of the Collector's configured issuers. | The claim named by the server's client_id_claim (default client_id, RFC 9068 \u00a72.2). |",
+   "anchor": "JWT access token (`token_format: \"jwt\"`) | The validated `iss` claim. ",
+   "origin": "row"
+  },
+  {
+   "id": "IDN-006",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "introspection",
+   "verification": "test",
+   "statement": "| Opaque token with introspection (token_format: \"introspection\") | The issuer of the authorization server whose introspection endpoint returned active: true. If the response contains iss, it MUST equal that issuer. | The response member named by the server's client_id_claim (default client_id, RFC 7662 \u00a72.2). |",
+   "anchor": "Opaque token with introspection (`token_format: \"introspection\"`) | Th",
+   "origin": "row"
+  },
+  {
+   "id": "IDN-007",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST NOT fall back to sub, azp, a certificate subject, or any other value, unless the server's token profile names that claim as client_id_claim.",
+   "anchor": "less the server's token profile names that claim as `client_id_claim`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-008",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The identity MUST NOT be taken from a request header, query parameter, request body, record content, an unvalidated token, or the subject of a TLS client certificate.",
+   "anchor": "ent, an unvalidated token, or the subject of a TLS client certificate.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDN-009",
+   "section": "4.2.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "The Collector MAY retain the identity as ingestion metadata outside the signed assertion.",
+   "anchor": "etain the identity as ingestion metadata outside the signed assertion.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-001",
+   "section": "4.2.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST validate the token before processing the body: signature or introspection result, expiry, nbf when present, issuer, and audience.",
+   "anchor": "ntrospection result, expiry, `nbf` when present, issuer, and audience.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-002",
+   "section": "4.2.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Audience. A JWT access token's aud MUST contain the Collector's issuer identifier from its metadata, which serves as the Collector's resource identifier (RFC 8707, RFC 9728).",
+   "anchor": "ch serves as the Collector's resource identifier (RFC 8707, RFC 9728).",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-003",
+   "section": "4.2.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "introspection",
+   "verification": "test",
+   "statement": "An introspection response that contains aud MUST contain it as well.",
+   "anchor": "An introspection response that contains `aud` MUST contain it as well.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-004",
+   "section": "4.2.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If the Collector cannot obtain the keys or the introspection result it needs and has no valid cached result, it MUST respond 503 COLLECTOR_UNAVAILABLE (with Retry-After) and MUST NOT accept the request.",
+   "anchor": "TOR_UNAVAILABLE` (with `Retry-After`) and MUST NOT accept the request.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-005",
+   "section": "4.2.3",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "introspection",
+   "verification": "test",
+   "statement": "Key sets MAY be cached as HTTP caching permits.",
+   "anchor": "Key sets MAY be cached as HTTP caching permits.",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-006",
+   "section": "4.2.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "introspection",
+   "verification": "test",
+   "statement": "An introspection result MUST NOT be cached beyond the token's exp or a configured maximum (RECOMMENDED: 5 minutes at most).",
+   "anchor": "oken's `exp` or a configured maximum (RECOMMENDED: 5 minutes at most).",
+   "origin": "sentence"
+  },
+  {
+   "id": "TOK-007",
+   "section": "4.2.3",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector SHOULD reject a JWT access token whose lifetime (exp minus iat) exceeds a configured maximum.",
+   "anchor": "token whose lifetime (`exp` minus `iat`) exceeds a configured maximum.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCT-001",
+   "section": "4.2.4",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "Sender-constrained tokens are RECOMMENDED, and especially for forwarders.",
+   "anchor": "der-constrained tokens are RECOMMENDED, and especially for forwarders.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCT-002",
+   "section": "4.2.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If a token carries a confirmation claim (cnf, in the JWT or in the introspection response), the Collector MUST verify the corresponding proof (RFC 9449 for jkt, RFC 8705 for x5t#S256) and MUST reject the request with 401 UNAUTHENTICATED if it cannot.",
+   "anchor": ") and MUST reject the request with `401 UNAUTHENTICATED` if it cannot.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCT-003",
+   "section": "4.2.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST NOT treat a constrained token as a bearer token.",
+   "anchor": "It MUST NOT treat a constrained token as a bearer token.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCO-001",
+   "section": "4.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST define one ingestion scope and MUST publish its name as ingestion_scope in its metadata.",
+   "anchor": " scope and MUST publish its name as `ingestion_scope` in its metadata.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCO-002",
+   "section": "4.3",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The RECOMMENDED scope name is trace.write.",
+   "anchor": "The RECOMMENDED scope name is `trace.write`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCO-003",
+   "section": "4.3",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Deployments MAY use a namespaced value, such as a URI.",
+   "anchor": "Deployments MAY use a namespaced value, such as a URI.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCO-004",
+   "section": "4.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "Clients MUST read the name from metadata.",
+   "anchor": "Clients MUST read the name from metadata.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCO-005",
+   "section": "4.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The ingestion scope MUST NOT also authorize producer-key administration, evidence retrieval, receipt lookup, or any other function.",
+   "anchor": "nistration, evidence retrieval, receipt lookup, or any other function.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SCO-006",
+   "section": "4.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "It MUST differ from the ingestion scope.",
+   "anchor": "It MUST differ from the ingestion scope.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-001",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST derive the evidence domain from the authenticated submitter identity (issuer, client_id) (\u00a74.2.2) and the Collector's own configuration.",
+   "anchor": " `(issuer, client_id)` (\u00a74.2.2) and the Collector's own configuration.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-002",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A submitter identity with no evidence-domain binding MUST be rejected with 403 and EVIDENCE_DOMAIN_NOT_BOUND.",
+   "anchor": "n binding MUST be rejected with `403` and `EVIDENCE_DOMAIN_NOT_BOUND`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-003",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST NOT apply a default domain to an unbound submitter in a multi-domain deployment.",
+   "anchor": "a default domain to an unbound submitter in a multi-domain deployment.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-004",
+   "section": "4.4",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "(A deployment with exactly one domain MAY treat it as an implicit configured value, but the rules in this section still apply.)",
+   "anchor": "implicit configured value, but the rules in this section still apply.)",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-005",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The evidence domain MUST NOT be read from the request path, query, headers, or record body.",
+   "anchor": "UST NOT be read from the request path, query, headers, or record body.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-006",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If a record contains a member named evidence_domain_id (or an equivalent partition field), the Collector MUST ignore it for every purpose, and SHOULD flag it for operators.",
+   "anchor": "or MUST ignore it for every purpose, and SHOULD flag it for operators.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-007",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The evidence domain MUST be determined before any producer-key lookup, identity lookup, or content-based routing.",
+   "anchor": "re any producer-key lookup, identity lookup, or content-based routing.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-008",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Every read and write in the Collector MUST be scoped to that domain.",
+   "anchor": "Every read and write in the Collector MUST be scoped to that domain.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-009",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A record identity, key, or receipt in another domain MUST NOT be observable through any response, error detail, timing-dependent behavior the Collector controls, or idempotency result.",
+   "anchor": "ming-dependent behavior the Collector controls, or idempotency result.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DOM-010",
+   "section": "4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "In particular, a submission in domain D2 MUST NOT conflict with, replay, or reveal an identical record identity in domain D1.",
+   "anchor": "ict with, replay, or reveal an identical record identity in domain D1.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRM-001",
+   "section": "4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Submitter-to-producer permission. The Collector MUST maintain which submitter identities (issuer, client_id) may submit records for which producer_id values.",
+   "anchor": "issuer, client_id)` may submit records for which `producer_id` values.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRM-002",
+   "section": "4.5",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A submitter MAY submit for other producers only if the Collector's configuration explicitly permits that submitter to forward for those producers (\u00a712).",
+   "anchor": "xplicitly permits that submitter to forward for those producers (\u00a712).",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRM-003",
+   "section": "4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A submitter that is not permitted MUST be rejected with 403 and SUBMITTER_NOT_AUTHORIZED, before key resolution or signature verification.",
+   "anchor": "TTER_NOT_AUTHORIZED`, before key resolution or signature verification.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRM-004",
+   "section": "4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "No self-authenticating keys. The Collector MUST NOT accept a public key from a request.",
+   "anchor": "ing keys.** The Collector MUST NOT accept a public key from a request.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRM-005",
+   "section": "4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Producer identity comes from the signed record. The Collector MUST NOT accept a producer identity, kid, or evidence domain from an unsigned header, query, or transport attribute in place of the values in the signed assertion.",
+   "anchor": "or transport attribute in place of the values in the signed assertion.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-001",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST NOT use any time supplied by the client or the record for this purpose.",
+   "anchor": "OT use any time supplied by the client or the record for this purpose.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-002",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "In particular it MUST NOT use trace.signed_at, an HTTP Date header, a request header or parameter, a transport timestamp, or a message timestamp from an intermediary.",
+   "anchor": "r, a transport timestamp, or a message timestamp from an intermediary.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-003",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY use one time for all elements of a bulk request, or a separate time for each element, but MUST be consistent within a request.",
+   "anchor": "parate time for each element, but MUST be consistent within a request.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-004",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "For an accepted record, the evaluation time MUST NOT be later than that record's received_at.",
+   "anchor": "he evaluation time MUST NOT be later than that record's `received_at`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-005",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "The Collector MUST retain, for every accepted record, the identity of the key that verified it (for example its thumbprint) and the evaluation time.",
+   "anchor": "that verified it (for example its thumbprint) and the evaluation time.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-006",
+   "section": "4.5.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "A Collector MAY expose them through its retrieval interfaces, which are outside this document.",
+   "anchor": "hem through its retrieval interfaces, which are outside this document.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-007",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST NOT re-evaluate the key for a record it has already accepted, and MUST NOT change the retained evaluation time, key identity, or receipt.",
+   "anchor": "UST NOT change the retained evaluation time, key identity, or receipt.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-008",
+   "section": "4.5.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A later version or profile MAY define it.",
+   "anchor": "A later version or profile MAY define it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-009",
+   "section": "4.5.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "Operators SHOULD keep a rotated-out key valid for verification for at least the longest delivery delay they tolerate after the producer last signed with it.",
+   "anchor": "t delivery delay they tolerate after the producer last signed with it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-010",
+   "section": "4.5.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "A registry SHOULD distinguish the time a key stops being used for signing from the time it stops being accepted for verification.",
+   "anchor": "ed for signing from the time it stops being accepted for verification.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-011",
+   "section": "4.5.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "Operators SHOULD NOT revoke a key as routine rotation.",
+   "anchor": "Operators SHOULD NOT revoke a key as routine rotation.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-012",
+   "section": "4.5.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "Operators SHOULD set valid_from earlier than the first use of a key by at least the clock skew between producer and Collector, and Collectors SHOULD keep their clocks synchronized to a trusted source.",
+   "anchor": " Collectors SHOULD keep their clocks synchronized to a trusted source.",
+   "origin": "sentence"
+  },
+  {
+   "id": "KEY-013",
+   "section": "4.5.1",
+   "level": "recommended",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "Intermediaries SHOULD keep such records rather than discard them (FW-12, Appendix D).",
+   "anchor": "SHOULD keep such records rather than discard them (FW-12, Appendix D).",
+   "origin": "sentence"
+  },
+  {
+   "id": "ORD-001",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST produce results as if it evaluated the following steps in order for each request, and MUST report the first failing step.",
+   "anchor": "eps in order for each request, and MUST report the first failing step.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ORD-S14",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 14 | Check chain admission (\u00a77.4.1). If admitted, evaluate integrity and completeness and set the flags (\u00a77.4.2, \u00a77.4.3). The evaluation is REQUIRED here only if the Collector advertises synchronous_integrity_flags. Otherwise it MAY be deferred until after acceptance (\u00a77.4.5). | 400 CHAIN_NOT_REGISTERED; otherwise none: flags |",
+   "anchor": "14 | Check chain admission (\u00a77.4.1). If admitted, evaluate integrity a",
+   "origin": "row"
+  },
+  {
+   "id": "WIR-001",
+   "section": "5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST reject any other media type with 415 and UNSUPPORTED_MEDIA_TYPE.",
+   "anchor": "T reject any other media type with `415` and `UNSUPPORTED_MEDIA_TYPE`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "WIR-002",
+   "section": "5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "gzip",
+   "verification": "test",
+   "statement": "A Collector MAY accept Content-Encoding: gzip and, if so, MUST list it in content_encodings_supported.",
+   "anchor": "ding: gzip` and, if so, MUST list it in `content_encodings_supported`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "WIR-003",
+   "section": "5.1",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST NOT send a content encoding the Collector has not advertised.",
+   "anchor": "ent MUST NOT send a content encoding the Collector has not advertised.",
+   "origin": "sentence"
+  },
+  {
+   "id": "WIR-004",
+   "section": "5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "gzip",
+   "verification": "test",
+   "statement": "Every size and nesting limit applies to the decoded body, and the Collector MUST enforce a decoded-size limit while decoding (not after) to resist decompression bombs.",
+   "anchor": "d-size limit while decoding (not after) to resist decompression bombs.",
+   "origin": "sentence"
+  },
+  {
+   "id": "WIR-005",
+   "section": "5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST ignore request headers that purport to carry producer identity, kid, evidence domain, or correlation values (for example Audit-Trace-ID); these are correlation hints, never evidence.",
+   "anchor": "xample `Audit-Trace-ID`); these are correlation hints, never evidence.",
+   "origin": "sentence"
+  },
+  {
+   "id": "JSN-001",
+   "section": "5.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The request body MUST be strict JSON, parsed as one document before any element of it is processed.",
+   "anchor": "ct JSON, parsed as one document before any element of it is processed.",
+   "origin": "sentence"
+  },
+  {
+   "id": "JSN-002",
+   "section": "5.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "NaN, Infinity, -Infinity, or values the profile's canonicalization cannot represent unambiguously (the profile MAY add stricter rules);",
+   "anchor": "n cannot represent unambiguously (the profile MAY add stricter rules);",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRF-001",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Conformance rule. Signature algorithms, signature input construction, canonicalization, and content-digest computation MUST conform to the TRACE record profile identified by the record's trace.eat_profile and advertised by the Collector in its metadata (\u00a711).",
+   "anchor": "ce.eat_profile` and advertised by the Collector in its metadata (\u00a711).",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRF-002",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT negotiate, select, or accept an algorithm independently of the applicable profile, and MUST NOT apply the cryptographic rules of one profile to a record of another.",
+   "anchor": "T apply the cryptographic rules of one profile to a record of another.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRF-003",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT accept an algorithm named in the request, in a header, or in transport metadata.",
+   "anchor": "algorithm named in the request, in a header, or in transport metadata.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRF-004",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| producer | Stable logical producer identifier. MUST equal producer_chain.producer_id byte for byte. |",
+   "anchor": "`producer` | Stable logical producer identifier. MUST equal `producer_",
+   "origin": "row"
+  },
+  {
+   "id": "PRF-005",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| trace.eat_profile | MUST be one of the profiles in the Collector's trace_profiles metadata. |",
+   "anchor": "`trace.eat_profile` | MUST be one of the profiles in the Collector's `",
+   "origin": "row"
+  },
+  {
+   "id": "PRF-006",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| trace.event_kind | MUST be permitted for the key. |",
+   "anchor": "`trace.event_kind` | MUST be permitted for the key. |",
+   "origin": "row"
+  },
+  {
+   "id": "PRF-007",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Unknown members MUST be preserved and are covered by the signature.",
+   "anchor": "Unknown members MUST be preserved and are covered by the signature.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRF-008",
+   "section": "5.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT remove, rename, reorder for storage semantics, or add members to the signed assertion.",
+   "anchor": "reorder for storage semantics, or add members to the signed assertion.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SIG-001",
+   "section": "5.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Verification MUST use the algorithm, signature input construction, and signature encoding that the record's profile defines (\u00a75.3).",
+   "anchor": "tion, and signature encoding that the record's profile defines (\u00a75.3).",
+   "origin": "sentence"
+  },
+  {
+   "id": "SIG-002",
+   "section": "5.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST reject a malformed signature encoding with SIGNATURE_MALFORMED.",
+   "anchor": "MUST reject a malformed signature encoding with `SIGNATURE_MALFORMED`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SIG-003",
+   "section": "5.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The algorithm needed to verify a record MUST be one the Collector lists for that profile in trace_profiles (\u00a711.2) and MUST match the algorithm of the registered key.",
+   "anchor": "_profiles` (\u00a711.2) and MUST match the algorithm of the registered key.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SIG-004",
+   "section": "5.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Otherwise the Collector MUST reject the record with UNSUPPORTED_ALGORITHM.",
+   "anchor": "ise the Collector MUST reject the record with `UNSUPPORTED_ALGORITHM`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SIG-005",
+   "section": "5.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector MUST verify with the key selected by the signed kid.",
+   "anchor": "The Collector MUST verify with the key selected by the signed `kid`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SIG-006",
+   "section": "5.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST NOT guess a key from a timestamp, and MUST NOT take a key or an algorithm from the request.",
+   "anchor": "a timestamp, and MUST NOT take a key or an algorithm from the request.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RID-001",
+   "section": "5.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST be a UUID in lowercase canonical text form (RFC 9562, 8-4-4-4-12 lowercase hexadecimal) or a ULID in uppercase Crockford base32 (26 characters).",
+   "anchor": " hexadecimal) or a ULID in uppercase Crockford base32 (26 characters).",
+   "origin": "sentence"
+  },
+  {
+   "id": "RID-002",
+   "section": "5.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST reject other forms with SCHEMA_INVALID.",
+   "anchor": "A Collector MUST reject other forms with `SCHEMA_INVALID`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RID-003",
+   "section": "5.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST compare record_id as an exact string.",
+   "anchor": "A Collector MUST compare `record_id` as an exact string.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RID-004",
+   "section": "5.6",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Two producers MAY use the same record_id without collision.",
+   "anchor": "Two producers MAY use the same `record_id` without collision.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRS-001",
+   "section": "5.7",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST store the assertion so that its canonical form (as the profile defines it), and therefore its signature input and content_digest, can be reproduced exactly at any later time.",
+   "anchor": "put and `content_digest`, can be reproduced exactly at any later time.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRS-002",
+   "section": "5.7",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT insert resolved claims, status, trust, corrections, or receipt data into the assertion.",
+   "anchor": "laims, status, trust, corrections, or receipt data into the assertion.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRS-003",
+   "section": "5.7",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "A Collector SHOULD also retain the exact received bytes, because some later anchoring formats commit to the as-transmitted serialization, which canonicalization cannot reconstruct.",
+   "anchor": "-transmitted serialization, which canonicalization cannot reconstruct.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LIM-001",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Array-length limits inside a record (for example tokens[]) are defined by the TRACE record profile and are reported as SCHEMA_INVALID; a Collector MUST NOT silently truncate a signed array.",
+   "anchor": "CHEMA_INVALID`; a Collector MUST NOT silently truncate a signed array.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LIM-002",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST apply all limits before expensive cryptographic processing.",
+   "anchor": "ector MUST apply all limits before expensive cryptographic processing.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LIM-003",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST NOT send more than the advertised limits.",
+   "anchor": "A client MUST NOT send more than the advertised limits.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SUB-001",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST treat both as acceptance and MUST use idempotent_replay, not the status, to tell them apart.",
+   "anchor": " and MUST use `idempotent_replay`, not the status, to tell them apart.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SUB-002",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A 201 response MAY include a Location header if the Collector offers a retrieval URL for the record; clients MUST NOT depend on it.",
+   "anchor": " offers a retrieval URL for the record; clients MUST NOT depend on it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RCP-001",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| accepted | REQUIRED | true. |",
+   "anchor": "`accepted` | REQUIRED | `true`. |",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-002",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| producer_id, record_id | REQUIRED | Echo of the record identity. |",
+   "anchor": "`producer_id`, `record_id` | REQUIRED | Echo of the record identity. |",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-003",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| content_digest | REQUIRED | The Collector-computed digest (\u00a75.5). A producer SHOULD compare it with its own computation. |",
+   "anchor": "`content_digest` | REQUIRED | The Collector-computed digest (\u00a75.5). A ",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-004",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| receipt_id | REQUIRED | Opaque string, unique within the evidence domain, assigned once per accepted record, and identical on every replay. |",
+   "anchor": "`receipt_id` | REQUIRED | Opaque string, unique within the evidence do",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-005",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| received_at | REQUIRED | RFC 3339 UTC timestamp with exactly millisecond precision and a Z suffix, assigned by the Collector at acceptance and identical on every replay. |",
+   "anchor": "`received_at` | REQUIRED | RFC 3339 UTC timestamp with exactly millise",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-006",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| idempotent_replay | REQUIRED | false on first acceptance; true when the response repeats an earlier acceptance. |",
+   "anchor": "`idempotent_replay` | REQUIRED | `false` on first acceptance; `true` w",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-007",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "| coverage_gap_flag, chain_link_failure_flag, equivocation_flag, late_flag | CONDITIONAL | REQUIRED, all four, if the Collector advertises synchronous_integrity_flags: true (\u00a711.2). Otherwise the Collector MUST omit all four (\u00a77.4.5). Values are as of the moment of original acceptance (\u00a77.4). |",
+   "anchor": "`coverage_gap_flag`, `chain_link_failure_flag`, `equivocation_flag`, `",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-008",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| unattributed_flag | CONDITIONAL | REQUIRED if the Collector accepts records without correlation context (\u00a77.5). |",
+   "anchor": "`unattributed_flag` | CONDITIONAL | REQUIRED if the Collector accepts ",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-009",
+   "section": "6.3",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| chain_admission | OPTIONAL | How the record's chain was admitted: pre_registered_genesis, first_observed_genesis, or linked_restart_genesis (\u00a77.4.1). RECOMMENDED when the Collector lists more than one mode. |",
+   "anchor": "`chain_admission` | OPTIONAL | How the record's chain was admitted: `p",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-010",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| receipt_sequence | OPTIONAL | Position in a Collector-internal receipt chain, if the Collector exposes one. Clients MUST NOT depend on its presence. |",
+   "anchor": "`receipt_sequence` | OPTIONAL | Position in a Collector-internal recei",
+   "origin": "row"
+  },
+  {
+   "id": "RCP-011",
+   "section": "6.3",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY add members.",
+   "anchor": "A Collector MAY add members.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RCP-012",
+   "section": "6.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST ignore members it does not recognize.",
+   "anchor": "A client MUST ignore members it does not recognize.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ACC-001",
+   "section": "7.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT report accepted: true for a record that has not passed verification.",
+   "anchor": "report `accepted: true` for a record that has not passed verification.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ACC-002",
+   "section": "7.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY retain a record that failed verification in separately access-controlled quarantine, but it MUST respond as for a rejection, MUST NOT return a receipt, and MUST NOT make the quarantined record visible to any evidence retrieval or correlation.",
+   "anchor": "e quarantined record visible to any evidence retrieval or correlation.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ACC-003",
+   "section": "7.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT label accepted records as settled, complete, or externally anchored on the basis of acceptance.",
+   "anchor": "ttled`, `complete`, or externally anchored on the basis of acceptance.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ACC-004",
+   "section": "7.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Assessments MUST NOT modify the accepted assertion.",
+   "anchor": "Assessments MUST NOT modify the accepted assertion.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ACC-005",
+   "section": "7.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY evaluate producer-chain integrity and completeness asynchronously (\u00a77.4.5).",
+   "anchor": "ate producer-chain integrity and completeness asynchronously (\u00a77.4.5).",
+   "origin": "sentence"
+  },
+  {
+   "id": "DUR-001",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A record whose commit is pending, in doubt, or later voided MUST NOT have been acknowledged.",
+   "anchor": "is pending, in doubt, or later voided MUST NOT have been acknowledged.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DUR-002",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A later identical submission MUST return identical receipt_id and received_at.",
+   "anchor": "tical submission MUST return identical `receipt_id` and `received_at`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DUR-003",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "The Collector MUST NOT acknowledge from an in-memory buffer, an unflushed write-ahead queue, or a message accepted onto an internal broker whose delivery to storage is not yet confirmed.",
+   "anchor": "nto an internal broker whose delivery to storage is not yet confirmed.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DUR-004",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If the Collector cannot complete the commit, it MUST return 503 COLLECTOR_UNAVAILABLE (or 500 INTERNAL_ERROR).",
+   "anchor": " it MUST return `503 COLLECTOR_UNAVAILABLE` (or `500 INTERNAL_ERROR`).",
+   "origin": "sentence"
+  },
+  {
+   "id": "DUR-005",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST NOT leave a visible record, receipt, or index entry for an unacknowledged submission.",
+   "anchor": "ible record, receipt, or index entry for an unacknowledged submission.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-001",
+   "section": "7.3.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "A Collector MAY offer a receipt lookup endpoint so that such a producer can reconcile locally generated evidence against Collector acceptance, without a broader evidence retrieval API.",
+   "anchor": "gainst Collector acceptance, without a broader evidence retrieval API.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-002",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "Parameters. producer_id and record_id are both REQUIRED path segments, each percent-encoded as RFC 3986 requires.",
+   "anchor": "oth REQUIRED path segments, each percent-encoded as RFC 3986 requires.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-003",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "The Collector MUST support GET and MAY support HEAD.",
+   "anchor": "The Collector MUST support `GET` and MAY support `HEAD`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-004",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "Receipt-read permission. The submitter identity (issuer, client_id) MUST be permitted to read receipts for producer_id in that evidence domain.",
+   "anchor": " permitted to read receipts for `producer_id` in that evidence domain.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-005",
+   "section": "7.3.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "A Collector MAY grant it to a producer's own identity and to forwarders.",
+   "anchor": "Collector MAY grant it to a producer's own identity and to forwarders.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-006",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "The caller MUST NOT treat its own record as accepted and SHOULD raise an alert, because this is the situation that a conflict (\u00a79) reports on submission.",
+   "anchor": "ause this is the situation that a conflict (\u00a79) reports on submission.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-007",
+   "section": "7.3.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "A 200 response is immutable and MAY be cached privately (Cache-Control: private).",
+   "anchor": "e is immutable and MAY be cached privately (`Cache-Control: private`).",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-008",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "A 404 MUST NOT be cached.",
+   "anchor": "A `404` MUST NOT be cached.",
+   "origin": "sentence"
+  },
+  {
+   "id": "LKP-009",
+   "section": "7.3.1",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "A Collector SHOULD rate-limit lookups per submitter identity and respond 429 with Retry-After, because a lookup can be used to probe for record identities.",
+   "anchor": "y-After`, because a lookup can be used to probe for record identities.",
+   "origin": "sentence"
+  },
+  {
+   "id": "CHN-001",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A record that fails key or signature verification MUST NOT create, anchor, or alter any chain state.",
+   "anchor": "nature verification MUST NOT create, anchor, or alter any chain state.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ADM-001",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST list at least one of first_observed_genesis and pre_registered_genesis.",
+   "anchor": "at least one of `first_observed_genesis` and `pre_registered_genesis`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ADM-002",
+   "section": "7.4.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Reporting. A receipt MAY carry chain_admission with one of the mode identifiers, stating how this record's chain was admitted.",
+   "anchor": "of the mode identifiers, stating how this record's chain was admitted.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ADM-003",
+   "section": "7.4.1",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector that lists more than one mode SHOULD include it.",
+   "anchor": "A Collector that lists more than one mode SHOULD include it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "FLG-EQUIVOCATION",
+   "section": "7.4.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "| equivocation_flag | A different record, with a different record_id and a valid signature, is already held at the same (producer_id, producer_instance_id, producer_chain_id, sequence_number). Both records are retained and flagged, and the Collector MUST NOT silently select one. |",
+   "anchor": "`equivocation_flag` | A different record, with a different `record_id`",
+   "origin": "row"
+  },
+  {
+   "id": "ASY-001",
+   "section": "7.4.5",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "async_flags",
+   "verification": "test",
+   "statement": "A Collector MAY evaluate producer-chain integrity and completeness (and late_flag) asynchronously, after durable acceptance.",
+   "anchor": "mpleteness (and `late_flag`) asynchronously, after durable acceptance.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-002",
+   "section": "7.4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "async_flags",
+   "verification": "test",
+   "statement": "A Collector that does so MUST omit coverage_gap_flag, chain_link_failure_flag, equivocation_flag, and late_flag from every receipt (single and bulk, first acceptance and replay), and MUST NOT advertise synchronous_integrity_flags: true.",
+   "anchor": "d replay), and MUST NOT advertise `synchronous_integrity_flags: true`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-003",
+   "section": "7.4.5",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST NOT read an absent flag as false.",
+   "anchor": "A client MUST NOT read an absent flag as `false`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-004",
+   "section": "7.4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "A Collector that returns the four flags in every receipt MUST advertise synchronous_integrity_flags: true in its metadata (\u00a711.2).",
+   "anchor": "advertise `synchronous_integrity_flags: true` in its metadata (\u00a711.2).",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-005",
+   "section": "7.4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "It then MUST return all four in every receipt, and the values MUST be the findings at the moment of acceptance.",
+   "anchor": "eipt, and the values MUST be the findings at the moment of acceptance.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-006",
+   "section": "7.4.5",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": "async_flags",
+   "verification": "test",
+   "statement": "A Collector that defers assessment SHOULD complete it and SHOULD make the findings available through its retrieval or assessment interfaces.",
+   "anchor": "the findings available through its retrieval or assessment interfaces.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-007",
+   "section": "7.4.5",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "async_flags",
+   "verification": "test",
+   "statement": "The findings, once made, are the same as those a synchronous Collector would have reported for the same arrival sequence, except that they MAY reflect records that arrived after the one being assessed.",
+   "anchor": "at they MAY reflect records that arrived after the one being assessed.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ASY-008",
+   "section": "7.4.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "async_flags",
+   "verification": "test",
+   "statement": "A Collector MUST NOT present a chain as intact, complete, or free of findings while its assessment is pending or has not been performed, and MUST NOT present deferred assessment as a property of acceptance.",
+   "anchor": " and MUST NOT present deferred assessment as a property of acceptance.",
+   "origin": "sentence"
+  },
+  {
+   "id": "COR-001",
+   "section": "7.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If the Collector's metadata states execution_correlation_required: true, a record whose trace lacks trace_execution_id or execution_authority MUST be rejected with MISSING_EXECUTION_CONTEXT.",
+   "anchor": "xecution_authority` MUST be rejected with `MISSING_EXECUTION_CONTEXT`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "COR-002",
+   "section": "7.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "unattributed",
+   "verification": "test",
+   "statement": "If execution_correlation_required is false, the Collector MAY accept such records, and MUST then return unattributed_flag: true in the receipt.",
+   "anchor": "ecords, and MUST then return `unattributed_flag: true` in the receipt.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLK-001",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "The array MUST contain between 1 and max_batch_records elements, and the decoded body MUST NOT exceed max_batch_bytes.",
+   "anchor": "rds` elements, and the decoded body MUST NOT exceed `max_batch_bytes`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLK-002",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "Unless the Collector advertises bulk_mixed_producers_supported: true, every record in a batch MUST have the same producer.",
+   "anchor": "pported: true`, every record in a batch MUST have the same `producer`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLP-001",
+   "section": "8.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "A failure on one record (bad signature, unknown key, conflict, size, storage failure) MUST NOT reject, delay the acknowledgement of, or alter the result of any other record.",
+   "anchor": "delay the acknowledgement of, or alter the result of any other record.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLP-002",
+   "section": "8.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "The Collector MUST NOT report any element accepted before that element's own commit.",
+   "anchor": "MUST NOT report any element accepted before that element's own commit.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLP-003",
+   "section": "8.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "Identity decisions among records in the same batch MUST be made as if the records were processed one at a time in array order.",
+   "anchor": "be made as if the records were processed one at a time in array order.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLP-004",
+   "section": "8.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "A Collector MAY process elements concurrently if it preserves this result.",
+   "anchor": "llector MAY process elements concurrently if it preserves this result.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLR-001",
+   "section": "8.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "results MUST contain exactly one element per request element, in request order, each with the zero-based index of the request element.",
+   "anchor": "equest order, each with the zero-based `index` of the request element.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLR-002",
+   "section": "8.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "If the Collector could not process the batch at all, it MUST respond with a request-level 503 (or 500, 429) and no results, and MUST NOT have accepted any element.",
+   "anchor": "500`, `429`) and no `results`, and MUST NOT have accepted any element.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLR-003",
+   "section": "8.3",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "It SHOULD use a request-level error when every element would fail with the same retryable condition.",
+   "anchor": "error when every element would fail with the same retryable condition.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLO-001",
+   "section": "8.4",
+   "level": "recommended",
+   "role": [
+    "producer"
+   ],
+   "capability": "bulk",
+   "verification": "behavior",
+   "statement": "Producers SHOULD place records of the same chain in ascending sequence_number order, and a Collector SHOULD process them in that order, but neither is required for correctness.",
+   "anchor": "D process them in that order, but neither is required for correctness.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLO-002",
+   "section": "8.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "A Collector MUST NOT reject, or give a different outcome to, a record because its predecessor has not arrived.",
+   "anchor": "ifferent outcome to, a record because its predecessor has not arrived.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLT-001",
+   "section": "8.5",
+   "level": "optional",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": "bulk",
+   "verification": "behavior",
+   "statement": "The producer MAY resubmit only those elements, or the entire batch.",
+   "anchor": "The producer MAY resubmit only those elements, or the entire batch.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BLT-002",
+   "section": "8.5",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": "bulk",
+   "verification": "behavior",
+   "statement": "After a request-level 429, 500, 503, a timeout, or a connection failure, the client MUST resubmit the same bytes, because it cannot know whether any element was accepted.",
+   "anchor": "e same bytes, because it cannot know whether any element was accepted.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDP-001",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Same record identity, different content_digest, record verifies | Return 409 with RECORD_ID_CONFLICT. The first-accepted record is authoritative and MUST NOT be overwritten, amended, or replaced. |",
+   "anchor": "Same record identity, different `content_digest`, record verifies | Re",
+   "origin": "row"
+  },
+  {
+   "id": "IDP-002",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Replay survives key changes. After a record is accepted, later key rotation, revocation, or validity-window changes MUST NOT turn a replay into a rejection or change the recorded result.",
+   "anchor": "MUST NOT turn a replay into a rejection or change the recorded result.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDP-003",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT confirm the existence of a record identity to any other caller.",
+   "anchor": "ST NOT confirm the existence of a record identity to any other caller.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDP-004",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Atomicity. Under concurrent submissions the Collector MUST serialize per record identity.",
+   "anchor": "ncurrent submissions the Collector MUST serialize per record identity.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDP-005",
+   "section": "9",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Conflict response. The Problem Details object SHOULD include producer_id, record_id, existing_content_digest, and submitted_content_digest.",
+   "anchor": "record_id`, `existing_content_digest`, and `submitted_content_digest`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "IDP-006",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY quarantine the conflicting record for investigation, but MUST NOT admit it to evidence retrieval or correlation under the contested identity.",
+   "anchor": " it to evidence retrieval or correlation under the contested identity.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-001",
+   "section": "9.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Minimum period. A Collector MUST retain the replay data of an accepted record for at least idempotency_retention_seconds after the record's received_at.",
+   "anchor": "east `idempotency_retention_seconds` after the record's `received_at`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-002",
+   "section": "9.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The value MUST be at least 86,400 (one day).",
+   "anchor": "The value MUST be at least 86,400 (one day).",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-003",
+   "section": "9.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "A value of at least 604,800 (seven days) is RECOMMENDED.",
+   "anchor": "A value of at least 604,800 (seven days) is RECOMMENDED.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-004",
+   "section": "9.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Tied to the record. A Collector MUST NOT remove the replay data of an accepted record while it still holds the record itself.",
+   "anchor": "lay data of an accepted record while it still holds the record itself.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-005",
+   "section": "9.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY retain it longer.",
+   "anchor": "A Collector MAY retain it longer.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-006",
+   "section": "9.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Public value. The published value MUST be a period that every submitter can rely on.",
+   "anchor": "The published value MUST be a period that every submitter can rely on.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-007",
+   "section": "9.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "Deletion obligations. A Collector MAY delete a record and its replay data earlier only to comply with a legal or contractual deletion obligation.",
+   "anchor": "arlier only to comply with a legal or contractual deletion obligation.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-008",
+   "section": "9.1",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "It SHOULD document that it does so.",
+   "anchor": "It SHOULD document that it does so.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RET-009",
+   "section": "9.1",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "Choosing the value. The period SHOULD exceed the longest time a producer or forwarder may hold and retry a record.",
+   "anchor": " the longest time a producer or forwarder may hold and retry a record.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RPR-001",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Within the replay retention period, a submission that satisfies the current request admission rules and whose record has the same identity and content_digest as an accepted record MUST be answered with the original receipt (200, idempotent_replay: true), regardless of any change since acceptance to the record-content rules.",
+   "anchor": "rdless of any change since acceptance to the **record-content rules**.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RPR-002",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "profile_withdrawal",
+   "verification": "test",
+   "statement": "If a Collector stops accepting new records under a profile, it MUST keep the ability to canonicalize and digest records of that profile, for replay only, until every accepted record of that profile has passed its replay retention period.",
+   "anchor": "ccepted record of that profile has passed its replay retention period.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RPR-003",
+   "section": "9.2",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "A Collector SHOULD NOT reduce max_record_bytes or max_batch_bytes while it holds replay data for records that the lower value would exclude.",
+   "anchor": "e it holds replay data for records that the lower value would exclude.",
+   "origin": "sentence"
+  },
+  {
+   "id": "EXP-001",
+   "section": "9.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST NOT return the original receipt's values, and MUST NOT report idempotent_replay: true.",
+   "anchor": "ginal receipt's values, and MUST NOT report `idempotent_replay: true`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "EXP-002",
+   "section": "9.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A producer or forwarder that needs deduplication across a longer period than idempotency_retention_seconds MUST NOT rely on the Collector for it.",
+   "anchor": "`idempotency_retention_seconds` MUST NOT rely on the Collector for it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "EXP-003",
+   "section": "9.3",
+   "level": "mandatory",
+   "role": [
+    "consumer"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "Consumers of evidence MUST treat two accepted records with the same record identity and content_digest as the same record.",
+   "anchor": "with the same record identity and `content_digest` as the same record.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BRK-001",
+   "section": "9.4",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "The maximum time a record can remain in the pipeline (broker retention, plus the longest outage the deployment tolerates, plus the maximum retry backoff) SHOULD be shorter than idempotency_retention_seconds.",
+   "anchor": "retry backoff) SHOULD be shorter than `idempotency_retention_seconds`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BRK-002",
+   "section": "9.4",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A forwarder or producer MUST NOT assume that a resubmission later than that is a replay.",
+   "anchor": "ducer MUST NOT assume that a resubmission later than that is a replay.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BRK-003",
+   "section": "9.4",
+   "level": "recommended",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "It is not a verdict on the evidence, and the forwarder SHOULD retain the record until the access problem is resolved.",
+   "anchor": "rwarder SHOULD retain the record until the access problem is resolved.",
+   "origin": "sentence"
+  },
+  {
+   "id": "BRK-004",
+   "section": "9.4",
+   "level": "recommended",
+   "role": [
+    "operator"
+   ],
+   "capability": null,
+   "verification": "advisory",
+   "statement": "The forwarder and the Collector's operator SHOULD treat this as a sign that the pipeline holds records too long.",
+   "anchor": " SHOULD treat this as a sign that the pipeline holds records too long.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRB-001",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| type | REQUIRED | https://govops.owasp.org/trace/errors/ followed by the lowercase, hyphenated error code (for example .../signature-invalid). |",
+   "anchor": "`type` | REQUIRED | `https://govops.owasp.org/trace/errors/` followed ",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-002",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| title | REQUIRED | Short, stable, human-readable summary. |",
+   "anchor": "`title` | REQUIRED | Short, stable, human-readable summary. |",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-003",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| status | REQUIRED | The HTTP status. |",
+   "anchor": "`status` | REQUIRED | The HTTP status. |",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-004",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| code | REQUIRED | One of the codes in \u00a710.2. |",
+   "anchor": "`code` | REQUIRED | One of the codes in \u00a710.2. |",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-005",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| retryable | REQUIRED | true if retrying the identical bytes later, without operator action, can succeed. |",
+   "anchor": "`retryable` | REQUIRED | `true` if retrying the identical bytes later,",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-006",
+   "section": "10.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| detail | OPTIONAL | Human-readable explanation for this occurrence. |",
+   "anchor": "`detail` | OPTIONAL | Human-readable explanation for this occurrence. ",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-007",
+   "section": "10.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| instance | OPTIONAL | A URI identifying this occurrence. |",
+   "anchor": "`instance` | OPTIONAL | A URI identifying this occurrence. |",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-008",
+   "section": "10.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| producer_id, record_id | OPTIONAL | Where applicable. |",
+   "anchor": "`producer_id`, `record_id` | OPTIONAL | Where applicable. |",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-009",
+   "section": "10.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| existing_content_digest, submitted_content_digest | OPTIONAL | On RECORD_ID_CONFLICT. |",
+   "anchor": "`existing_content_digest`, `submitted_content_digest` | OPTIONAL | On ",
+   "origin": "row"
+  },
+  {
+   "id": "PRB-010",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "An error body MUST NOT contain a bearer token, signed record content, a signature, or any information about another evidence domain.",
+   "anchor": "ontent, a signature, or any information about another evidence domain.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRB-011",
+   "section": "10.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "detail MUST NOT reveal whether a record identity exists to a caller not permitted to know (\u00a79).",
+   "anchor": "ether a record identity exists to a caller not permitted to know (\u00a79).",
+   "origin": "sentence"
+  },
+  {
+   "id": "ERR-001",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "In particular, a Collector MUST use 503, not 500, when it deliberately reports a retryable storage or dependency outage, and MUST use 413, not 400, for oversized bodies and records.",
+   "anchor": "tage, and MUST use `413`, not `400`, for oversized bodies and records.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ERR-002",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY return a more specific problem type for a code, but the code and status MUST NOT change.",
+   "anchor": "roblem `type` for a code, but the `code` and `status` MUST NOT change.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ERR-003",
+   "section": "10.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY collapse KEY_UNKNOWN, KEY_NOT_VALID, and EVENT_KIND_NOT_AUTHORIZED into KEY_UNKNOWN to avoid disclosing registry contents to a submitter not entitled to see them.",
+   "anchor": " disclosing registry contents to a submitter not entitled to see them.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ERR-004",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST NOT use a code that falsely implies the key was authorized.",
+   "anchor": "It MUST NOT use a code that falsely implies the key was authorized.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ERR-005",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT reveal through the code or status that a record identity exists in another evidence domain.",
+   "anchor": "de or status that a record identity exists in another evidence domain.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ERR-006",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Errors that are not listed use the closest HTTP status with Problem Details and one of the codes above; a Collector MUST NOT invent a new code within v1.",
+   "anchor": "the codes above; a Collector MUST NOT invent a new `code` within `v1`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-001",
+   "section": "10.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST NOT retry a response whose retryable is false unchanged.",
+   "anchor": "ient MUST NOT retry a response whose `retryable` is `false` unchanged.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-002",
+   "section": "10.3",
+   "level": "optional",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "It MAY retry after an operator has acted (for example, registered a key).",
+   "anchor": "MAY retry after an operator has acted (for example, registered a key).",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-003",
+   "section": "10.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST retry retryable: true outcomes, timeouts, and connection failures with the same bytes (or a serialization with the same canonical form under the record's profile), using exponential backoff with jitter.",
+   "anchor": "rm under the record's profile), using exponential backoff with jitter.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-004",
+   "section": "10.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "It MUST honor Retry-After (RFC 9110 \u00a710.2.3) when present.",
+   "anchor": "It MUST honor `Retry-After` (RFC 9110 \u00a710.2.3) when present.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-005",
+   "section": "10.3",
+   "level": "recommended",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "RECOMMENDED: initial delay 1 s, factor 2, cap 5 min, full jitter.",
+   "anchor": "RECOMMENDED: initial delay 1 s, factor 2, cap 5 min, full jitter.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-006",
+   "section": "10.3",
+   "level": "recommended",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client that depends on evidence delivery SHOULD keep unacknowledged records in durable local storage until it receives a receipt or a terminal rejection.",
+   "anchor": "ble local storage until it receives a receipt or a terminal rejection.",
+   "origin": "sentence"
+  },
+  {
+   "id": "RTY-007",
+   "section": "10.3",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST NOT change a record's content and resubmit it under the same record_id.",
+   "anchor": " change a record's content and resubmit it under the same `record_id`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSC-001",
+   "section": "11.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST contain no per-tenant, per-client, or secret information.",
+   "anchor": "It MUST contain no per-tenant, per-client, or secret information.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSC-002",
+   "section": "11.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "A Collector served under a path prefix publishes the document at the well-known location for its origin and MAY additionally serve it under the prefix.",
+   "anchor": "ocation for its origin and MAY additionally serve it under the prefix.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSC-003",
+   "section": "11.1",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector SHOULD send Cache-Control with a max-age.",
+   "anchor": "A Collector SHOULD send `Cache-Control` with a `max-age`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSC-004",
+   "section": "11.1",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client SHOULD cache for that period (default one hour if absent), and MUST re-fetch after a 404, 410, or repeated UNSUPPORTED_PROFILE or limit errors.",
+   "anchor": "ter a `404`, `410`, or repeated `UNSUPPORTED_PROFILE` or limit errors.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSC-005",
+   "section": "11.1",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "A client MUST ignore members it does not recognize.",
+   "anchor": "A client MUST ignore members it does not recognize.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSM-001",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| issuer | string (HTTPS URL) | REQUIRED | Identifier of the Collector. MUST equal the origin (and path prefix, if any) from which this document was retrieved. A client MUST reject the document otherwise. |",
+   "anchor": "`issuer` | string (HTTPS URL) | REQUIRED | Identifier of the Collector",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-002",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| api_versions_supported | array of string | REQUIRED | Supported API versions, such as [\"v1\"]. |",
+   "anchor": "`api_versions_supported` | array of string | REQUIRED | Supported API ",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-003",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| trace_ingestion_endpoint | string (URL) | REQUIRED | Single-record submission URL. |",
+   "anchor": "`trace_ingestion_endpoint` | string (URL) | REQUIRED | Single-record s",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-004",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| trace_profiles | array of object | REQUIRED | One entry for each supported TRACE record profile, with that profile's cryptographic capabilities. See \u00a711.2.1. |",
+   "anchor": "`trace_profiles` | array of object | REQUIRED | One entry for each sup",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-005",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| authorization_servers | array of object | REQUIRED | The OAuth 2.0 authorization servers whose tokens the Collector accepts, each with its token profile (\u00a711.2.2). A client obtains each server's metadata by RFC 8414 or OpenID Connect Discovery at its issuer. |",
+   "anchor": "`authorization_servers` | array of object | REQUIRED | The OAuth 2.0 a",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-006",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "sender_constrained",
+   "verification": "test",
+   "statement": "| sender_constrained_tokens_supported | array of string | OPTIONAL | Any of dpop (RFC 9449) and mtls (RFC 8705). Absent means none (\u00a74.2.4). |",
+   "anchor": "`sender_constrained_tokens_supported` | array of string | OPTIONAL | A",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-007",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| ingestion_scope | string | REQUIRED | The scope required by both ingestion endpoints. |",
+   "anchor": "`ingestion_scope` | string | REQUIRED | The scope required by both ing",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-008",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| scopes_supported | array of string | OPTIONAL | Other scopes the Collector defines. |",
+   "anchor": "`scopes_supported` | array of string | OPTIONAL | Other scopes the Col",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-009",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| max_record_bytes | integer | REQUIRED | Maximum decoded bytes in one record (\u00a75.8). |",
+   "anchor": "`max_record_bytes` | integer | REQUIRED | Maximum decoded bytes in one",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-010",
+   "section": "11.2",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| max_nesting_depth | integer | RECOMMENDED | Maximum JSON nesting depth. |",
+   "anchor": "`max_nesting_depth` | integer | RECOMMENDED | Maximum JSON nesting dep",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-011",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "mixed_producers",
+   "verification": "test",
+   "statement": "| bulk_mixed_producers_supported | boolean | OPTIONAL | Default false. |",
+   "anchor": "`bulk_mixed_producers_supported` | boolean | OPTIONAL | Default `false",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-012",
+   "section": "11.2",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| execution_correlation_required | boolean | RECOMMENDED | Whether records without the full correlation pair are rejected (\u00a77.5). Default true when absent. |",
+   "anchor": "`execution_correlation_required` | boolean | RECOMMENDED | Whether rec",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-013",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| producer_chain_registration_modes_supported | array of string | REQUIRED | Any of first_observed_genesis, pre_registered_genesis, linked_restart_genesis. MUST contain first_observed_genesis or pre_registered_genesis, and MUST list every mode the Collector supports. The set decides how unregistered chains are treated (\u00a77.4.1): if it contains first_observed_genesis, a record of an unregistered chain is admitted; if i",
+   "anchor": "`producer_chain_registration_modes_supported` | array of string | REQU",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-014",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| synchronous_integrity_flags | boolean | OPTIONAL | Default false. true if every receipt carries coverage_gap_flag, chain_link_failure_flag, equivocation_flag, and late_flag as evaluated at acceptance (\u00a77.4.5). If false or absent, receipts omit all four. |",
+   "anchor": "`synchronous_integrity_flags` | boolean | OPTIONAL | Default `false`. ",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-015",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "| trace_receipt_endpoint | string (URI Template) | OPTIONAL | Receipt lookup URL template with the variables producer_id and record_id (RFC 6570), for example https://collector.example.org/api/v1/audit/trace/receipts/{producer_id}/{record_id}. Present if and only if the Collector offers receipt lookup (\u00a77.3.1). |",
+   "anchor": "`trace_receipt_endpoint` | string (URI Template) | OPTIONAL | Receipt ",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-016",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "| receipt_scope | string | CONDITIONAL | The scope required by receipt lookup. REQUIRED if trace_receipt_endpoint is present. MUST differ from ingestion_scope. |",
+   "anchor": "`receipt_scope` | string | CONDITIONAL | The scope required by receipt",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-017",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| idempotency_retention_seconds | integer | REQUIRED | The minimum period, in seconds from a record's received_at, for which the Collector guarantees to retain replay data and so to answer an identical resubmission with the original receipt (\u00a79.1). At least 86,400. |",
+   "anchor": "`idempotency_retention_seconds` | integer | REQUIRED | The minimum per",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-018",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "profile_withdrawal",
+   "verification": "test",
+   "statement": "| trace_profiles_replay_only | array of string | OPTIONAL | Profiles the Collector no longer accepts for new records but still canonicalizes for replay (\u00a79.2). A profile is in trace_profiles or in this list, never both. |",
+   "anchor": "`trace_profiles_replay_only` | array of string | OPTIONAL | Profiles t",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-019",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "durability_claim",
+   "verification": "test",
+   "statement": "| acceptance_durability | string | OPTIONAL | local_durable or replicated_durable (\u00a77.2). A Collector that omits it makes no replication claim. |",
+   "anchor": "`acceptance_durability` | string | OPTIONAL | `local_durable` or `repl",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-020",
+   "section": "11.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "gzip",
+   "verification": "test",
+   "statement": "| content_encodings_supported | array of string | OPTIONAL | For example [\"gzip\"]. Absent means none. |",
+   "anchor": "`content_encodings_supported` | array of string | OPTIONAL | For examp",
+   "origin": "row"
+  },
+  {
+   "id": "DSM-021",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The limits MUST be values that every authorized submitter can rely on.",
+   "anchor": "The limits MUST be values that every authorized submitter can rely on.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSM-022",
+   "section": "11.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MAY grant a particular submitter higher limits, but MUST NOT enforce lower ones than it publishes.",
+   "anchor": "tter higher limits, but MUST NOT enforce lower ones than it publishes.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSP-001",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| profile | string | REQUIRED | The trace.eat_profile value. |",
+   "anchor": "`profile` | string | REQUIRED | The `trace.eat_profile` value. |",
+   "origin": "row"
+  },
+  {
+   "id": "DSP-002",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| signature_algorithms_supported | array of string | REQUIRED | Signature algorithms the Collector verifies for records of this profile. Identifiers are those the profile defines. |",
+   "anchor": "`signature_algorithms_supported` | array of string | REQUIRED | Signat",
+   "origin": "row"
+  },
+  {
+   "id": "DSP-003",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| canonicalization | string | REQUIRED | The profile's canonicalization method, as the profile identifies it. |",
+   "anchor": "`canonicalization` | string | REQUIRED | The profile's canonicalizatio",
+   "origin": "row"
+  },
+  {
+   "id": "DSP-004",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| content_digest_algorithm | string | REQUIRED | The profile's content-digest algorithm, as the profile identifies it. This is the <algorithm> prefix of content_digest values. |",
+   "anchor": "`content_digest_algorithm` | string | REQUIRED | The profile's content",
+   "origin": "row"
+  },
+  {
+   "id": "DSP-005",
+   "section": "11.2.1",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| event_kinds_supported | array of string | RECOMMENDED | Event kinds the Collector accepts under this profile. |",
+   "anchor": "`event_kinds_supported` | array of string | RECOMMENDED | Event kinds ",
+   "origin": "row"
+  },
+  {
+   "id": "DSP-006",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST list only values it implements and enforces.",
+   "anchor": "A Collector MUST list only values it implements and enforces.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSP-007",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "It MUST verify a record using only the values in the entry for the record's trace.eat_profile.",
+   "anchor": "ing only the values in the entry for the record's `trace.eat_profile`.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSP-008",
+   "section": "11.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT negotiate an algorithm with a client.",
+   "anchor": "A Collector MUST NOT negotiate an algorithm with a client.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSP-009",
+   "section": "11.2.1",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": "multiple_profiles",
+   "verification": "test",
+   "statement": "Different profiles MAY list different suites.",
+   "anchor": "Different profiles MAY list different suites.",
+   "origin": "sentence"
+  },
+  {
+   "id": "DSA-001",
+   "section": "11.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| issuer | string (URL) | REQUIRED | The authorization server's issuer identifier. Compared as an exact string with the iss of a token. This is the issuer component of a submitter identity. |",
+   "anchor": "`issuer` | string (URL) | REQUIRED | The authorization server's issuer",
+   "origin": "row"
+  },
+  {
+   "id": "DSA-002",
+   "section": "11.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| token_format | string | REQUIRED | jwt (JWT access tokens, RFC 9068) or introspection (opaque tokens, RFC 7662). |",
+   "anchor": "`token_format` | string | REQUIRED | `jwt` (JWT access tokens, RFC 906",
+   "origin": "row"
+  },
+  {
+   "id": "DSA-003",
+   "section": "11.2.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| client_id_claim | string | OPTIONAL | The token claim, or introspection response member, that carries the OAuth client identifier. Default client_id. |",
+   "anchor": "`client_id_claim` | string | OPTIONAL | The token claim, or introspect",
+   "origin": "row"
+  },
+  {
+   "id": "DSA-004",
+   "section": "11.2.2",
+   "level": "optional",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| scope_claim | string | OPTIONAL | The claim that carries the granted scopes. Default scope (a space-separated string). |",
+   "anchor": "`scope_claim` | string | OPTIONAL | The claim that carries the granted",
+   "origin": "row"
+  },
+  {
+   "id": "DSA-005",
+   "section": "11.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT list an authorization server whose tokens it cannot validate by the stated profile.",
+   "anchor": "rization server whose tokens it cannot validate by the stated profile.",
+   "origin": "sentence"
+  },
+  {
+   "id": "FW-1",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-1 A forwarder MUST authenticate to the Collector with its own OAuth 2.0 client credentials. It MUST NOT strip authentication, share one credential across evidence domains, or present a producer's token as proof of its own authority.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-2",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-2 A forwarder serving records for more than one evidence domain MUST keep a separate credential and a separate durable queue (or topic) per evidence domain, and MUST NOT combine records from different domains into one request or one queue. It MUST NOT choose the domain from record content, because the Collector derives the domain from the credential.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-3",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-3 A forwarder MUST deliver each record so that the canonical form (as the record's profile defines it) of the delivered record is identical to that of the record the producer signed. It MUST NOT add, remove, rename, truncate, normalize, or re-encode any signed member, MUST NOT re-sign, and MUST NOT wrap the record in a way the Collector would store as the assertion.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-4",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-4 A forwarder SHOULD forward the original bytes unchanged. If it parses and re-serializes, it MUST use a strict JSON implementation (rejecting rather than collapsing duplicate member names), MUST preserve string content and number values exactly, and MUST NOT pass records through a lossy intermediate data model (for example, converting integers to floating point, or splitting a record into typed attributes and r",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-5",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-5 A forwarder MUST NOT infer, set, or replace any evidence field (producer identity, kid, correlation values, evidence domain, trust claims) from unsigned transport metadata such as OTLP attributes, resource attributes, Kafka headers, topic names, or HTTP headers. Such metadata is a routing and correlation hint only.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-6",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-6 A forwarder MUST submit only for producers that the Collector's configuration permits it to forward for (\u00a74.5). Its permission is necessary and never sufficient: the Collector verifies each record's signature and key authority regardless of who forwarded it.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-7",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-7 A forwarder MAY pre-verify signatures to discard obviously corrupt input or to raise an operator alarm. It MUST NOT silently drop, repair, or \"fix up\" a record, and MUST NOT treat its own verification as a substitute for the Collector's.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-8",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-8 Only a Collector receipt (a 201 or 200 from the single-record endpoint, or an element with accepted: true) means a record was accepted. A forwarder MUST NOT report to its upstream that a record was accepted by the Collector until it holds that receipt for that record.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-9",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-9 A forwarder MAY durably queue a record and acknowledge custody to its upstream before the Collector responds, but the acknowledgement MUST be distinguishable from Collector acceptance (for example, by status name or protocol semantics). The upstream MUST NOT be led to believe the evidence is held by the Collector. For example, an OTLP Export success means only that the OpenTelemetry Collector received the data",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-10",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-10 A forwarder that acknowledges custody MUST persist the record durably before doing so, and MUST retain it, across restarts, until the Collector returns an acceptance or a terminal rejection for it.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-11",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-11 A forwarder MUST provide at-least-once delivery and rely on Collector idempotency (\u00a79) to absorb duplicates. It MUST NOT drop a record because of a retryable: true error, a timeout, or a connection failure.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-12",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-12 A forwarder MUST NOT retry a terminal rejection (retryable: false) unchanged. It MUST surface it, including the Problem Details code and record_id, to an operator or a dead-letter destination. It MUST NOT silently discard it.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-13",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-13 A forwarder that consumes from a broker MUST NOT advance or commit its consumption position for a record until that record has an acceptance or a terminal rejection that has been surfaced.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-14",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-14 A forwarder MUST follow \u00a710.3 for retries and honor Retry-After.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-15",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-15 A forwarder MUST respect the limits and capabilities in Collector metadata (record and batch size, bulk_mixed_producers_supported), and MUST re-read metadata after limit-related errors.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-16",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-16 A forwarder MUST NOT depend on ordering. It MAY preserve or reorder records.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-17",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-17 A forwarder MUST NOT log bearer tokens, and SHOULD NOT log record content; logging producer_id, record_id, content_digest, and result codes is sufficient.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "FW-18",
+   "section": "12.1",
+   "level": "mandatory",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-18 A forwarder SHOULD limit the time it holds a record (queue or broker retention, plus outage, plus retry backoff) to less than the Collector's idempotency_retention_seconds, and SHOULD alert when a record approaches that age. A resubmission after the replay data has expired is accepted as new evidence (\u00a79.3). A forwarder MUST NOT treat an authentication or authorization rejection of an already-accepted record ",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "CO-1",
+   "section": "12.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "- CO-1 A Collector MUST treat a forwarded record exactly as a directly submitted record: authorization, key resolution, signature verification, event-kind permission, identity, idempotency, and findings are identical.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "CO-2",
+   "section": "12.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "- CO-2 A Collector MUST bind the evidence domain to the forwarder's submitter identity (issuer, client_id) (\u00a74.2.2), never to anything in the record or transport metadata.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "CO-3",
+   "section": "12.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "- CO-3 A Collector MUST store the signed assertion unchanged. It MUST NOT record the forwarder as the producer. It MAY record the submitter's identity as ingestion metadata outside the assertion.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "CO-4",
+   "section": "12.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "- CO-4 A Collector MUST NOT return a receipt for a record before durable acceptance (\u00a77.2), even if the forwarder is highly trusted. Forwarders rely on this to implement FW-8.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "RCN-001",
+   "section": "12.4",
+   "level": "recommended",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "A producer SHOULD poll with backoff and SHOULD NOT look up a record before an intermediary has had time to deliver it.",
+   "anchor": "OT look up a record before an intermediary has had time to deliver it.",
+   "origin": "sentence"
+  },
+  {
+   "id": "FW-19",
+   "section": "12.4",
+   "level": "recommended",
+   "role": [
+    "forwarder"
+   ],
+   "capability": null,
+   "verification": "behavior",
+   "statement": "- FW-19 A forwarder that receives Collector receipts SHOULD retain, for each record, producer_id, record_id, content_digest, receipt_id, and received_at, at least until the upstream producer can reconcile, so it can answer an upstream question without a second submission.",
+   "anchor": "",
+   "origin": "inline"
+  },
+  {
+   "id": "SEC-001",
+   "section": "13",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT use signed_at to reject a record as a replay, MUST NOT use it to decide key validity (\u00a74.5.1), and MUST use its own received_at for receipt order.",
+   "anchor": "lidity (\u00a74.5.1), and MUST use its own `received_at` for receipt order.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SEC-002",
+   "section": "13",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "Collectors and consumers MUST NOT present accepted evidence as more than the record kind establishes.",
+   "anchor": "OT present accepted evidence as more than the record kind establishes.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SEC-003",
+   "section": "13",
+   "level": "recommended",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "FW-2 requires separate credentials and queues, and Collectors SHOULD limit each credential to one domain.",
+   "anchor": "and queues, and Collectors SHOULD limit each credential to one domain.",
+   "origin": "sentence"
+  },
+  {
+   "id": "SEC-004",
+   "section": "13",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "Downgrade. The record's profile fixes the cryptographic suite, and the Collector MUST NOT negotiate an algorithm independently of it (\u00a75.3).",
+   "anchor": " Collector MUST NOT negotiate an algorithm independently of it (\u00a75.3).",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRV-001",
+   "section": "14",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "Records MUST NOT contain raw bearer tokens or other credentials.",
+   "anchor": "Records MUST NOT contain raw bearer tokens or other credentials.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRV-002",
+   "section": "14",
+   "level": "recommended",
+   "role": [
+    "producer"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "Producers SHOULD minimize personal data in signed fields and prefer pseudonymous or workload identifiers, because an accepted assertion cannot be edited.",
+   "anchor": " workload identifiers, because an accepted assertion cannot be edited.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRV-003",
+   "section": "14",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "inspection",
+   "statement": "A Collector MUST isolate evidence by domain, MUST protect stored evidence with access control and encryption at rest appropriate to its sensitivity, and SHOULD apply a documented retention period.",
+   "anchor": "te to its sensitivity, and SHOULD apply a documented retention period.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRV-004",
+   "section": "14",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A Collector MUST NOT expose evidence through this API's responses beyond the receipt.",
+   "anchor": "T NOT expose evidence through this API's responses beyond the receipt.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRV-005",
+   "section": "14",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Discovery metadata is public and MUST NOT reveal tenants, clients, producers, or registry contents.",
+   "anchor": "and MUST NOT reveal tenants, clients, producers, or registry contents.",
+   "origin": "sentence"
+  },
+  {
+   "id": "PRV-006",
+   "section": "14",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Error responses, logs, and metrics MUST NOT include record content or tokens.",
+   "anchor": "esponses, logs, and metrics MUST NOT include record content or tokens.",
+   "origin": "sentence"
+  },
+  {
+   "id": "ORD-S01",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 1 | TLS | connection refused |",
+   "anchor": "1 | TLS | connection refused |",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S02",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 2 | Authenticate the token and derive the submitter identity (issuer, client_id) (\u00a74.2) | 401 UNAUTHENTICATED; 503 COLLECTOR_UNAVAILABLE if keys or introspection are unavailable |",
+   "anchor": "2 | Authenticate the token and derive the submitter identity `(issuer,",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S03",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 3 | Check ingestion scope | 403 INSUFFICIENT_SCOPE |",
+   "anchor": "3 | Check ingestion scope | `403 INSUFFICIENT_SCOPE` |",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S04",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 4 | Derive evidence domain | 403 EVIDENCE_DOMAIN_NOT_BOUND |",
+   "anchor": "4 | Derive evidence domain | `403 EVIDENCE_DOMAIN_NOT_BOUND` |",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S05",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| 5 | Check Content-Type, Content-Encoding, body byte limit (max_record_bytes for a single-record request, max_batch_bytes for a batch), rate limit | 415, 413 RECORD_TOO_LARGE or 413 REQUEST_TOO_LARGE, 429 |",
+   "anchor": "5 | Check `Content-Type`, `Content-Encoding`, body byte limit (`max_re",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S06A",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 6a | Strict-parse the whole body as one JSON document (\u00a75.2) | 400 MALFORMED_JSON: whole request rejected |",
+   "anchor": "6a | Strict-parse the whole body as one JSON document (\u00a75.2) | `400 MA",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S06B",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 6b | Check the envelope. Single-record request: the top-level value is a JSON object. Batch: the top-level value is an array, it is non-empty, within the count limit, and (unless mixing is supported) all elements that have a string producer have the same one | 400 SCHEMA_INVALID (single), 400 BATCH_NOT_ARRAY, BATCH_EMPTY, BATCH_TOO_MANY_RECORDS, BATCH_MIXED_PRODUCERS: whole request rejected |",
+   "anchor": "6b | Check the envelope. Single-record request: the top-level value is",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S07",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 7 | For each record that is a JSON object with a string producer, check submitter-to-producer permission. Elements that are not such objects skip this step and fail at step 9 | 403 SUBMITTER_NOT_AUTHORIZED |",
+   "anchor": "7 | For each record that is a JSON object with a string `producer`, ch",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S08",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 8 | Check per-record size limit | 413 RECORD_TOO_LARGE |",
+   "anchor": "8 | Check per-record size limit | `413 RECORD_TOO_LARGE` |",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S09",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 9 | Identify the record: the element is a JSON object, producer, record_id, and trace.eat_profile are strings, and the Collector can canonicalize records of that profile (including a profile kept for replay only, \u00a79.2) | 400 SCHEMA_INVALID, UNSUPPORTED_PROFILE |",
+   "anchor": "9 | Identify the record: the element is a JSON object, `producer`, `re",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S10",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 10 | Compute content_digest; look up the record identity; if an accepted record with the same digest exists and its replay data is retained (\u00a79.1), return its original receipt. Steps 10a to 14 are skipped | none: replay |",
+   "anchor": "10 | Compute `content_digest`; look up the record identity; if an acce",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S10A",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 10a | Validate the record as a new record under the current rules: the profile is currently accepted for new records, required members, record_id form, producer equals producer_chain.producer_id, event-kind schema, array limits, required correlation context | 400 SCHEMA_INVALID, UNSUPPORTED_PROFILE, PRODUCER_IDENTITY_MISMATCH, MISSING_EXECUTION_CONTEXT |",
+   "anchor": "10a | Validate the record as a new record under the **current** rules:",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S11",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 11 | Resolve the key by (evidence domain, producer_id, kid); check validity window and revocation at the evaluation time (\u00a74.5.1, the Collector's clock, never signed_at); check event_kind permission | 400 KEY_UNKNOWN, KEY_NOT_VALID, EVENT_KIND_NOT_AUTHORIZED |",
+   "anchor": "11 | Resolve the key by `(evidence domain, producer_id, kid)`; check v",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S12",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 12 | Check the signature encoding and algorithm, and verify the signature, all as the record's profile defines | 400 SIGNATURE_MALFORMED, UNSUPPORTED_ALGORITHM, SIGNATURE_INVALID |",
+   "anchor": "12 | Check the signature encoding and algorithm, and verify the signat",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S13",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 13 | If the identity exists with a different digest | 409 RECORD_ID_CONFLICT |",
+   "anchor": "13 | If the identity exists with a different digest | `409 RECORD_ID_C",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S15",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 15 | Atomically and durably commit the record and its receipt | 503 COLLECTOR_UNAVAILABLE, 500 INTERNAL_ERROR |",
+   "anchor": "15 | Atomically and durably commit the record and its receipt | `503 C",
+   "origin": "table"
+  },
+  {
+   "id": "ORD-S16",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 16 | Return the receipt | none |",
+   "anchor": "16 | Return the receipt | none |",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-01",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| The body is not a valid strict JSON document: syntax error, invalid UTF-8, duplicate member name anywhere, excessive nesting, an unrepresentable value (\u00a75.2) | Entire request | 400 MALFORMED_JSON. Nothing is processed, including elements that appear valid. |",
+   "anchor": "The body is not a valid strict JSON document: syntax error, invalid UT",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-02",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| The batch envelope is invalid: top-level value is not an array, empty, too many elements, body too large, mixed producers without support | Entire request | 400 or 413 with an envelope code. Nothing is processed. |",
+   "anchor": "The batch envelope is invalid: top-level value is not an array, empty,",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-03",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Single-record request whose body is valid JSON but not an object | Entire request (the body is the record) | 400 SCHEMA_INVALID. |",
+   "anchor": "Single-record request whose body is valid JSON but not an object | **E",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-04",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Valid JSON element in a batch that is not an object, or that violates the record schema, profile, event-kind schema, record_id form, or correlation requirement | Individual element | Element rejected with SCHEMA_INVALID (or the specific code, such as UNSUPPORTED_PROFILE). Other elements are processed. |",
+   "anchor": "Valid JSON element in a batch that is not an object, or that violates ",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-05",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Record too large (batch element) | Individual element | RECORD_TOO_LARGE. |",
+   "anchor": "Record too large (batch element) | **Individual element** | `RECORD_TO",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-06",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Submitter not permitted for the element's producer in a mixed batch | Individual element | SUBMITTER_NOT_AUTHORIZED. |",
+   "anchor": "Submitter not permitted for the element's producer in a mixed batch | ",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-07",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Key unknown, not valid, or not authorized for the event kind; signature malformed, unsupported algorithm, or invalid | Individual element | The specific code of \u00a710.2. |",
+   "anchor": "Key unknown, not valid, or not authorized for the event kind; signatur",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-08",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Chain not registered; identity conflict | Individual element | CHAIN_NOT_REGISTERED; RECORD_ID_CONFLICT. |",
+   "anchor": "Chain not registered; identity conflict | **Individual element** | `CH",
+   "origin": "table"
+  },
+  {
+   "id": "VAL-09",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Durable write fails for one element | Individual element | COLLECTOR_UNAVAILABLE. |",
+   "anchor": "Durable write fails for one element | **Individual element** | `COLLEC",
+   "origin": "table"
+  },
+  {
+   "id": "LIM-RECORD",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Bytes in one record (decoded) | max_record_bytes | 65,536 | 413 RECORD_TOO_LARGE |",
+   "anchor": "Bytes in one record (decoded) | `max_record_bytes` | 65,536 | `413 REC",
+   "origin": "table"
+  },
+  {
+   "id": "LIM-BATCHBYTES",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Bytes in one bulk request body (decoded) | max_batch_bytes | 1,048,576 | 413 REQUEST_TOO_LARGE |",
+   "anchor": "Bytes in one bulk request body (decoded) | `max_batch_bytes` | 1,048,5",
+   "origin": "table"
+  },
+  {
+   "id": "LIM-BATCHRECORDS",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Records in one batch | max_batch_records | 100 | 400 BATCH_TOO_MANY_RECORDS |",
+   "anchor": "Records in one batch | `max_batch_records` | 100 | `400 BATCH_TOO_MANY",
+   "origin": "table"
+  },
+  {
+   "id": "LIM-DEPTH",
+   "section": "5.8",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| JSON nesting depth | max_nesting_depth | 16 | 400 MALFORMED_JSON |",
+   "anchor": "JSON nesting depth | `max_nesting_depth` | 16 | `400 MALFORMED_JSON` |",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S1",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 201 Created | First durable acceptance: the record was verified and durably accepted by this request | Acceptance receipt, idempotent_replay false |",
+   "anchor": "`201 Created` | First durable acceptance: the record was verified and ",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S2",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 200 OK | Idempotent replay: an identical record had already been accepted | The original acceptance receipt, idempotent_replay true |",
+   "anchor": "`200 OK` | Idempotent replay: an identical record had already been acc",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S3",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 400 | Malformed JSON, invalid record, unverifiable signature or key | Problem Details |",
+   "anchor": "`400` | Malformed JSON, invalid record, unverifiable signature or key ",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S4",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 401, 403 | Authentication or authorization failure | Problem Details |",
+   "anchor": "`401`, `403` | Authentication or authorization failure | Problem Detai",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S5",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 409 | The record identity is bound to different content | Problem Details |",
+   "anchor": "`409` | The record identity is bound to different content | Problem De",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S6",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 413, 415, 429 | Limit, media type, rate | Problem Details |",
+   "anchor": "`413`, `415`, `429` | Limit, media type, rate | Problem Details |",
+   "origin": "table"
+  },
+  {
+   "id": "SUB-S7",
+   "section": "6.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| 500, 503 | Nothing was accepted; retry is safe | Problem Details |",
+   "anchor": "`500`, `503` | Nothing was accepted; retry is safe | Problem Details |",
+   "origin": "table"
+  },
+  {
+   "id": "CHN-ADMISSION",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Admission | Is this producer authorized to establish or extend this chain on this Collector? | Admitted, or rejected with CHAIN_NOT_REGISTERED. The only chain-related ground for rejection. |",
+   "anchor": "**Admission** | Is this producer authorized to establish or extend thi",
+   "origin": "table"
+  },
+  {
+   "id": "CHN-INTEGRITY",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Integrity | Does the record link correctly: consecutive position, matching predecessor hash, one record per position? | Always accepted. Reported by chain_link_failure_flag and equivocation_flag when assessed synchronously, otherwise by the Collector's assessment interface (\u00a77.4.5). |",
+   "anchor": "**Integrity** | Does the record link correctly: consecutive position, ",
+   "origin": "table"
+  },
+  {
+   "id": "CHN-COMPLETENESS",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Completeness | Are the earlier records of the chain held? | Always accepted. Reported by coverage_gap_flag when assessed synchronously, otherwise by the Collector's assessment interface (\u00a77.4.5). |",
+   "anchor": "**Completeness** | Are the earlier records of the chain held? | Always",
+   "origin": "table"
+  },
+  {
+   "id": "ADM-M1",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "chain_mode:first_observed",
+   "verification": "test",
+   "statement": "| first_observed_genesis only | not applicable (no registration is offered) | Admitted. The chain is anchored at first sight. |",
+   "anchor": "`first_observed_genesis` only | not applicable (no registration is off",
+   "origin": "table"
+  },
+  {
+   "id": "ADM-M2",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "chain_mode:pre_registered",
+   "verification": "test",
+   "statement": "| pre_registered_genesis only | Admitted, in any arrival order, including before the genesis record | Rejected: 400 CHAIN_NOT_REGISTERED, whether the record is a genesis or not. Nothing is stored and no chain is created. |",
+   "anchor": "`pre_registered_genesis` only | **Admitted**, in any arrival order, in",
+   "origin": "table"
+  },
+  {
+   "id": "ADM-M3",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "chain_mode:both",
+   "verification": "test",
+   "statement": "| both | Admitted. The chain is classified as pre-registered. | Admitted. The chain is anchored at first sight. |",
+   "anchor": "both | **Admitted.** The chain is classified as pre-registered. | **Ad",
+   "origin": "table"
+  },
+  {
+   "id": "FLG-CHAIN_LINK_FAILURE",
+   "section": "7.4.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "| chain_link_failure_flag | (a) The record at sequence_number \u2212 1 is held, but its content_digest differs from this record's prev_record_hash; or (b) the record is at sequence_number 1 and does not carry the profile's genesis sentinel, or is at a later position and does carry it (a forged origin). Case (b) applies whether or not the predecessor is held. |",
+   "anchor": "`chain_link_failure_flag` | (a) The record at `sequence_number \u2212 1` is",
+   "origin": "table"
+  },
+  {
+   "id": "FLG-COVERAGE_GAP",
+   "section": "7.4.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "| coverage_gap_flag | The record at sequence_number \u2212 1 on the same chain is not held, and this record is not at sequence_number 1. |",
+   "anchor": "`coverage_gap_flag` | The record at `sequence_number \u2212 1` on the same ",
+   "origin": "table"
+  },
+  {
+   "id": "FLG-LATE",
+   "section": "7.4.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "sync_flags",
+   "verification": "test",
+   "statement": "| late_flag | The Collector's receipt time is later than signed_at by more than a configured lateness policy. Lateness alone is never a reason to reject. |",
+   "anchor": "`late_flag` | The Collector's receipt time is later than `signed_at` b",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E1",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Body is not a strict JSON document (syntax, UTF-8, duplicate member, depth) | 400 | MALFORMED_JSON |",
+   "anchor": "Body is not a strict JSON document (syntax, UTF-8, duplicate member, d",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E2",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Body is valid JSON but the top-level value is not an array | 400 | BATCH_NOT_ARRAY |",
+   "anchor": "Body is valid JSON but the top-level value is not an array | `400` | `",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E3",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Empty array | 400 | BATCH_EMPTY |",
+   "anchor": "Empty array | `400` | `BATCH_EMPTY` |",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E4",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| More than max_batch_records elements | 400 | BATCH_TOO_MANY_RECORDS |",
+   "anchor": "More than `max_batch_records` elements | `400` | `BATCH_TOO_MANY_RECOR",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E5",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Decoded body larger than max_batch_bytes | 413 | REQUEST_TOO_LARGE |",
+   "anchor": "Decoded body larger than `max_batch_bytes` | `413` | `REQUEST_TOO_LARG",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E6",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Mixed producers without support | 400 | BATCH_MIXED_PRODUCERS |",
+   "anchor": "Mixed producers without support | `400` | `BATCH_MIXED_PRODUCERS` |",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E7",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Submitter not permitted for the batch's single producer | 403 | SUBMITTER_NOT_AUTHORIZED |",
+   "anchor": "Submitter not permitted for the batch's single producer | `403` | `SUB",
+   "origin": "table"
+  },
+  {
+   "id": "BLK-E8",
+   "section": "8.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| Authentication, scope, domain, media type, rate | 401, 403, 415, 429 | as in \u00a710 |",
+   "anchor": "Authentication, scope, domain, media type, rate | `401`, `403`, `415`,",
+   "origin": "table"
+  },
+  {
+   "id": "IDP-T1",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Same record identity, same content_digest as an accepted record whose replay data is retained (\u00a79.1) | Return the original acceptance receipt with idempotent_replay: true and status 200 (the first acceptance returned 201). Do not create a second receipt, a second chain entry, or new flags. |",
+   "anchor": "Same record identity, same `content_digest` as an accepted record whos",
+   "origin": "table"
+  },
+  {
+   "id": "IDP-T3",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Same chain position, different record_id, both verify | Not a conflict. Accept the new record. Equivocation is reported by equivocation_flag: true if the Collector assesses synchronously, and otherwise by its assessment interface (\u00a77.4.5). |",
+   "anchor": "Same chain position, different `record_id`, both verify | Not a confli",
+   "origin": "table"
+  },
+  {
+   "id": "IDP-T4",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Same record_id, different producer_id | Different identity. Accept normally. |",
+   "anchor": "Same `record_id`, different `producer_id` | Different identity. Accept",
+   "origin": "table"
+  },
+  {
+   "id": "IDP-T5",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Same identity bytes in a different evidence domain | Different identity. Accept normally, with an independent receipt. |",
+   "anchor": "Same identity bytes in a different evidence domain | Different identit",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T1",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Authentication, scope, evidence-domain binding, submitter-to-producer permission (\u00a74.2 to \u00a74.5; steps 2 to 4, 7) | Yes, current rules. | A replay is answered only to a submitter who is currently authorized. If a binding or permission has been removed, the result is the corresponding 401 or 403. If the binding now points to another evidence domain, the submission is evaluated in that domain and is not a replay of th",
+   "anchor": "Authentication, scope, evidence-domain binding, submitter-to-producer ",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T2",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Media type, encoding, rate limit, strict JSON, batch envelope (steps 5, 6a, 6b) | Yes, current rules. | |",
+   "anchor": "Media type, encoding, rate limit, strict JSON, batch envelope (steps 5",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T3",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Body size and per-record size limits (steps 5, 8) | Yes, current values. | These protect the Collector before it can identify the record. See the note below. |",
+   "anchor": "Body size and per-record size limits (steps 5, 8) | **Yes, current val",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T4",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Record identification and canonicalization (step 9) | Yes, but a withdrawn profile is kept available for replay. | See below. |",
+   "anchor": "Record identification and canonicalization (step 9) | **Yes**, but a w",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T5",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Profile currently accepted for new records, required members, record_id form, event-kind schema, array limits, correlation requirement (step 10a) | No. | These are record-content rules. They apply only to a record being accepted for the first time. A tightened schema rule or a changed execution_correlation_required has no effect on a replay. |",
+   "anchor": "Profile currently accepted for new records, required members, `record_",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T6",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Key validity, event-kind authorization, signature (steps 11 and 12) | No. | \u00a74.5.1 and \u00a79, item 3. The verification made at acceptance is preserved. |",
+   "anchor": "Key validity, event-kind authorization, signature (steps 11 and 12) | ",
+   "origin": "table"
+  },
+  {
+   "id": "RPR-T7",
+   "section": "9.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| Chain admission, integrity and completeness (step 14) | No. | The flags are those of the original receipt. A changed registration or registration mode does not affect a replay. |",
+   "anchor": "Chain admission, integrity and completeness (step 14) | **No.** | The ",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-UNAUTHENTICATED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| UNAUTHENTICATED | 401 | no | Missing, expired, or invalid access token | Obtain a new token, then resubmit (once per failure) |",
+   "anchor": "`UNAUTHENTICATED` | 401 | no | Missing, expired, or invalid access tok",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-INSUFFICIENT_SCOPE",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| INSUFFICIENT_SCOPE | 403 | no | Token lacks the ingestion scope | Fix client registration |",
+   "anchor": "`INSUFFICIENT_SCOPE` | 403 | no | Token lacks the ingestion scope | Fi",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-EVIDENCE_DOMAIN_NOT_BOUND",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| EVIDENCE_DOMAIN_NOT_BOUND | 403 | no | Submitter has no evidence-domain binding | Operator action |",
+   "anchor": "`EVIDENCE_DOMAIN_NOT_BOUND` | 403 | no | Submitter has no evidence-dom",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-SUBMITTER_NOT_AUTHORIZED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| SUBMITTER_NOT_AUTHORIZED | 403 | no | Submitter may not submit for this producer_id | Operator action |",
+   "anchor": "`SUBMITTER_NOT_AUTHORIZED` | 403 | no | Submitter may not submit for t",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-UNSUPPORTED_MEDIA_TYPE",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| UNSUPPORTED_MEDIA_TYPE | 415 | no | Content-Type or Content-Encoding not supported | Fix request |",
+   "anchor": "`UNSUPPORTED_MEDIA_TYPE` | 415 | no | `Content-Type` or `Content-Encod",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-REQUEST_TOO_LARGE",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| REQUEST_TOO_LARGE | 413 | no | Decoded body exceeds max_batch_bytes | Split the batch |",
+   "anchor": "`REQUEST_TOO_LARGE` | 413 | no | Decoded body exceeds `max_batch_bytes",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-RECORD_TOO_LARGE",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| RECORD_TOO_LARGE | 413 | no | A record exceeds max_record_bytes | Terminal for that record |",
+   "anchor": "`RECORD_TOO_LARGE` | 413 | no | A record exceeds `max_record_bytes` | ",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-BATCH_TOO_MANY_RECORDS",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| BATCH_TOO_MANY_RECORDS | 400 | no | More than max_batch_records elements | Split the batch |",
+   "anchor": "`BATCH_TOO_MANY_RECORDS` | 400 | no | More than `max_batch_records` el",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-BATCH_NOT_ARRAY",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| BATCH_NOT_ARRAY | 400 | no | A bulk request body is valid JSON but not an array | Fix request |",
+   "anchor": "`BATCH_NOT_ARRAY` | 400 | no | A bulk request body is valid JSON but n",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-BATCH_EMPTY",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| BATCH_EMPTY | 400 | no | Empty batch | Fix request |",
+   "anchor": "`BATCH_EMPTY` | 400 | no | Empty batch | Fix request |",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-BATCH_MIXED_PRODUCERS",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "| BATCH_MIXED_PRODUCERS | 400 | no | Mixed producers and mixing is not supported | Split by producer |",
+   "anchor": "`BATCH_MIXED_PRODUCERS` | 400 | no | Mixed producers and mixing is not",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-MALFORMED_JSON",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| MALFORMED_JSON | 400 | no | The body is not a strict JSON document: syntax error, invalid UTF-8, duplicate member name, unrepresentable value, or excessive nesting. Always rejects the whole request | Fix and resend |",
+   "anchor": "`MALFORMED_JSON` | 400 | no | The body is not a strict JSON document: ",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-SCHEMA_INVALID",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| SCHEMA_INVALID | 400 | no | Valid JSON that is not a valid record: not an object (a bulk element, or a single-record body), missing or mistyped members, event-kind schema, array limits, or the record_id form | Terminal for that record |",
+   "anchor": "`SCHEMA_INVALID` | 400 | no | Valid JSON that is not a valid record: n",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-UNSUPPORTED_PROFILE",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| UNSUPPORTED_PROFILE | 400 | no | trace.eat_profile is not the profile of any entry in trace_profiles | Terminal for that record |",
+   "anchor": "`UNSUPPORTED_PROFILE` | 400 | no | `trace.eat_profile` is not the `pro",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-MISSING_EXECUTION_CONTEXT",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| MISSING_EXECUTION_CONTEXT | 400 | no | Correlation pair required and absent or incomplete | Terminal for that record |",
+   "anchor": "`MISSING_EXECUTION_CONTEXT` | 400 | no | Correlation pair required and",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-PRODUCER_IDENTITY_MISMATCH",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| PRODUCER_IDENTITY_MISMATCH | 400 | no | producer differs from producer_chain.producer_id | Terminal for that record |",
+   "anchor": "`PRODUCER_IDENTITY_MISMATCH` | 400 | no | `producer` differs from `pro",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-SIGNATURE_MALFORMED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| SIGNATURE_MALFORMED | 400 | no | The signature encoding is invalid under the record's profile | Terminal for that record |",
+   "anchor": "`SIGNATURE_MALFORMED` | 400 | no | The signature encoding is invalid u",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-UNSUPPORTED_ALGORITHM",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| UNSUPPORTED_ALGORITHM | 400 | no | The algorithm needed to verify the record is not supported for its profile, or does not match the registered key's algorithm | Terminal for that record |",
+   "anchor": "`UNSUPPORTED_ALGORITHM` | 400 | no | The algorithm needed to verify th",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-CHAIN_NOT_REGISTERED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| CHAIN_NOT_REGISTERED | 400 | no | The record's chain is not registered and the Collector does not admit chains at first sight (\u00a77.4.1) | Operator registers the chain, then resubmit |",
+   "anchor": "`CHAIN_NOT_REGISTERED` | 400 | no | The record's chain is not register",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-RECEIPT_NOT_FOUND",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "| RECEIPT_NOT_FOUND | 404 | yes | Receipt lookup only: no receipt is retained for the identity in the caller's evidence domain (\u00a77.3.1). It does not mean the record was rejected | Retry later within the reconciliation window |",
+   "anchor": "`RECEIPT_NOT_FOUND` | 404 | yes | Receipt lookup only: no receipt is r",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-RECEIPT_ACCESS_DENIED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "| RECEIPT_ACCESS_DENIED | 403 | no | Receipt lookup only: the submitter identity may not read receipts for this producer_id | Operator action |",
+   "anchor": "`RECEIPT_ACCESS_DENIED` | 403 | no | Receipt lookup only: the submitte",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-KEY_UNKNOWN",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| KEY_UNKNOWN | 400 | no | No key registered for (domain, producer_id, kid) | Operator registers key |",
+   "anchor": "`KEY_UNKNOWN` | 400 | no | No key registered for `(domain, producer_id",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-KEY_NOT_VALID",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| KEY_NOT_VALID | 400 | no | The key is outside its validity window or revoked at the Collector's evaluation time (\u00a74.5.1). This includes a legitimately signed record that arrives after its key expired | Operator extends the key's validity, then resubmit the same bytes |",
+   "anchor": "`KEY_NOT_VALID` | 400 | no | The key is outside its validity window or",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-EVENT_KIND_NOT_AUTHORIZED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| EVENT_KIND_NOT_AUTHORIZED | 400 | no | Key may not sign this event_kind | Operator action |",
+   "anchor": "`EVENT_KIND_NOT_AUTHORIZED` | 400 | no | Key may not sign this `event_",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-SIGNATURE_INVALID",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| SIGNATURE_INVALID | 400 | no | Signature does not verify | Terminal for that record |",
+   "anchor": "`SIGNATURE_INVALID` | 400 | no | Signature does not verify | Terminal ",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-RECORD_ID_CONFLICT",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| RECORD_ID_CONFLICT | 409 | no | Identity already bound to different content | Terminal; investigate |",
+   "anchor": "`RECORD_ID_CONFLICT` | 409 | no | Identity already bound to different ",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-RATE_LIMITED",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| RATE_LIMITED | 429 | yes | Rate limit | Wait Retry-After, then retry |",
+   "anchor": "`RATE_LIMITED` | 429 | yes | Rate limit | Wait `Retry-After`, then ret",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-COLLECTOR_UNAVAILABLE",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| COLLECTOR_UNAVAILABLE | 503 | yes | Storage or a required dependency unavailable; nothing accepted | Back off, retry |",
+   "anchor": "`COLLECTOR_UNAVAILABLE` | 503 | yes | Storage or a required dependency",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-COLLECTOR_INTEGRITY_HOLD",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| COLLECTOR_INTEGRITY_HOLD | 503 | yes | Collector refuses submissions until an operator resolves an integrity condition; nothing accepted | Back off for a long interval, retry |",
+   "anchor": "`COLLECTOR_INTEGRITY_HOLD` | 503 | yes | Collector refuses submissions",
+   "origin": "table"
+  },
+  {
+   "id": "ERR-INTERNAL_ERROR",
+   "section": "10.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "| INTERNAL_ERROR | 500 | yes | Unexpected failure; nothing accepted | Back off, retry a bounded number of times |",
+   "anchor": "`INTERNAL_ERROR` | 500 | yes | Unexpected failure; nothing accepted | ",
+   "origin": "table"
+  },
+  {
+   "id": "RCN-T1",
+   "section": "12.4",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "| 200, content_digest equal to its own | The Collector accepted this record at received_at. | Mark the record accepted. Stop retrying. |",
+   "anchor": "`200`, `content_digest` equal to its own | The Collector accepted this",
+   "origin": "table"
+  },
+  {
+   "id": "RCN-T2",
+   "section": "12.4",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "| 200, content_digest different | The Collector holds different content under this identity. | Do not mark accepted. Raise an alert. Do not resubmit changed content under the same record_id (\u00a710.3). |",
+   "anchor": "`200`, `content_digest` different | The Collector holds different cont",
+   "origin": "table"
+  },
+  {
+   "id": "RCN-T3",
+   "section": "12.4",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "| 404, first submission younger than idempotency_retention_seconds | Not accepted (yet). | Keep the record. Retry the lookup later. If the record is no longer held by the pipeline, resubmit it (identical bytes). |",
+   "anchor": "`404`, first submission younger than `idempotency_retention_seconds` |",
+   "origin": "table"
+  },
+  {
+   "id": "RCN-T4",
+   "section": "12.4",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "| 404, first submission older than idempotency_retention_seconds | Inconclusive: not accepted, rejected, or expired. | Do not infer rejection. Resubmitting is permitted. It is accepted as a new record if no longer held (\u00a79.3). |",
+   "anchor": "`404`, first submission older than `idempotency_retention_seconds` | I",
+   "origin": "table"
+  },
+  {
+   "id": "RCN-T5",
+   "section": "12.4",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "| 403 or 401 | No access, or access changed. | Resolve access. Do not treat as a verdict on the evidence. |",
+   "anchor": "`403` or `401` | No access, or access changed. | Resolve access. Do no",
+   "origin": "table"
+  },
+  {
+   "id": "RCN-T6",
+   "section": "12.4",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "| 429, 503 | Rate limit or outage. | Back off (\u00a710.3). |",
+   "anchor": "`429`, `503` | Rate limit or outage. | Back off (\u00a710.3). |",
+   "origin": "table"
+  },
+  {
+   "id": "AUT-M1",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Bearer tokens in the Authorization request header (RFC 6750 \u00a72.1).",
+   "anchor": "Bearer tokens in the `Authorization` request header (RFC 6750 \u00a72.1).",
+   "origin": "manual"
+  },
+  {
+   "id": "AUT-M2",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The Collector validates the signature with the keys of the issuing authorization server (published at the jwks_uri in its RFC 8414 metadata), and checks iss, aud (\u00a74.2.3), exp, nbf when present, the client identifier claim (\u00a74.2.2), and scope (\u00a74.3).",
+   "anchor": "hen present, the client identifier claim (\u00a74.2.2), and `scope` (\u00a74.3).",
+   "origin": "manual"
+  },
+  {
+   "id": "AUT-M3",
+   "section": "4.2.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Rejection of a sender-constrained token whose proof it cannot verify (\u00a74.2.4).",
+   "anchor": "n of a sender-constrained token whose proof it cannot verify (\u00a74.2.4).",
+   "origin": "manual"
+  },
+  {
+   "id": "IDN-R1",
+   "section": "4.2.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Two identities are equal only if both components are equal.",
+   "anchor": "Two identities are equal only if both components are equal.",
+   "origin": "manual"
+  },
+  {
+   "id": "KEY-R0",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Evaluation time. For a record the Collector has not accepted before, the evaluation time is the Collector's own clock reading when it performs step 11 of \u00a74.6, for that record.",
+   "anchor": "own clock reading when it performs step 11 of \u00a74.6, for that record**.",
+   "origin": "manual"
+  },
+  {
+   "id": "KEY-R1",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Rule. Given the evaluation time T, a key is valid if and only if all of the following hold:",
+   "anchor": "ion time `T`, a key is valid if and only if all of the following hold:",
+   "origin": "manual"
+  },
+  {
+   "id": "KEY-R2",
+   "section": "4.5.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Each record has one evaluation time.",
+   "anchor": "Each record has one evaluation time.",
+   "origin": "manual"
+  },
+  {
+   "id": "ORD-R2",
+   "section": "4.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Steps 10a to 14 apply only to a record that is not a replay (\u00a79.2).",
+   "anchor": "Steps 10a to 14 apply only to a record that is not a replay (\u00a79.2).",
+   "origin": "manual"
+  },
+  {
+   "id": "JSN-R1",
+   "section": "5.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A single-record body that is valid JSON but not an object is rejected with 400 SCHEMA_INVALID.",
+   "anchor": "is valid JSON but not an object is rejected with `400 SCHEMA_INVALID`.",
+   "origin": "manual"
+  },
+  {
+   "id": "DUR-C1",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Steps 2 to 14 of \u00a74.6 succeeded for the record (for a replay, steps 2 to 10).",
+   "anchor": " to 14 of \u00a74.6 succeeded for the record (for a replay, steps 2 to 10).",
+   "origin": "manual"
+  },
+  {
+   "id": "DUR-C2",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The assertion (as defined in \u00a75.7) and its receipt data (receipt_id, received_at, content_digest, and the integrity flags if the Collector returns them) have been written to durable storage.",
+   "anchor": "s if the Collector returns them) have been written to durable storage.",
+   "origin": "manual"
+  },
+  {
+   "id": "DUR-C3",
+   "section": "7.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The write is committed.",
+   "anchor": "The write is committed.",
+   "origin": "manual"
+  },
+  {
+   "id": "CHN-R1",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Admission does not depend on integrity or completeness.",
+   "anchor": "Admission does not depend on integrity or completeness.",
+   "origin": "manual"
+  },
+  {
+   "id": "CHN-R2",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Integrity and completeness findings never cause rejection, and never depend on arrival order.",
+   "anchor": "ess findings never cause rejection, and never depend on arrival order.",
+   "origin": "manual"
+  },
+  {
+   "id": "CHN-R4",
+   "section": "7.4",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Admission is a property of the chain, not of the key.",
+   "anchor": "Admission is a property of the chain, not of the key.",
+   "origin": "manual"
+  },
+  {
+   "id": "ADM-R1",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Admission is remembered. Once a chain is admitted, later records of it are admitted without re-evaluating registration.",
+   "anchor": ", later records of it are admitted without re-evaluating registration.",
+   "origin": "manual"
+  },
+  {
+   "id": "ADM-R2",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "chain_mode:first_observed",
+   "verification": "test",
+   "statement": "First-sight anchoring is not authentication of history. Under first_observed_genesis, a record of an unknown chain that is not at sequence_number 1 is admitted, the chain is anchored at that first observed record, and coverage_gap_flag is true.",
+   "anchor": "chored at that first observed record, and `coverage_gap_flag` is true.",
+   "origin": "manual"
+  },
+  {
+   "id": "ADM-R3",
+   "section": "7.4.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "chain_mode:pre_registered",
+   "verification": "test",
+   "statement": "A rejected record leaves no trace. A CHAIN_NOT_REGISTERED rejection is terminal for that chain until an administrator registers it.",
+   "anchor": "ection is terminal for that chain until an administrator registers it.",
+   "origin": "manual"
+  },
+  {
+   "id": "BLP-R1",
+   "section": "8.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "Each record is processed independently, exactly as a single submission.",
+   "anchor": "ach record is processed independently, exactly as a single submission.",
+   "origin": "manual"
+  },
+  {
+   "id": "BLP-R2",
+   "section": "8.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "An element that is valid JSON but is not a JSON object, or is not a valid record, is rejected on its own with SCHEMA_INVALID (or the more specific code).",
+   "anchor": "rejected on its own with `SCHEMA_INVALID` (or the more specific code).",
+   "origin": "manual"
+  },
+  {
+   "id": "BLP-R3",
+   "section": "8.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "bulk",
+   "verification": "test",
+   "statement": "The contrary case is a failure of the JSON document itself: a syntax error, invalid UTF-8, a duplicate member name, or excessive nesting anywhere in the body.",
+   "anchor": "8, a duplicate member name, or excessive nesting anywhere in the body.",
+   "origin": "manual"
+  },
+  {
+   "id": "BLT-M1",
+   "section": "8.5",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": "bulk",
+   "verification": "behavior",
+   "statement": "treat each element with accepted: true as complete, including elements with idempotent_replay: true;",
+   "anchor": " true` as complete, including elements with `idempotent_replay: true`;",
+   "origin": "manual"
+  },
+  {
+   "id": "BLT-M2",
+   "section": "8.5",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": "bulk",
+   "verification": "behavior",
+   "statement": "treat each element whose error has retryable: false as a terminal rejection: not retry it unchanged, and surface it to an operator;",
+   "anchor": "inal rejection: not retry it unchanged, and surface it to an operator;",
+   "origin": "manual"
+  },
+  {
+   "id": "BLT-M3",
+   "section": "8.5",
+   "level": "mandatory",
+   "role": [
+    "producer",
+    "forwarder"
+   ],
+   "capability": "bulk",
+   "verification": "behavior",
+   "statement": "resubmit each element whose error has retryable: true, unchanged, after a backoff (\u00a710.3).",
+   "anchor": "whose error has `retryable: true`, unchanged, after a backoff (\u00a710.3).",
+   "origin": "manual"
+  },
+  {
+   "id": "EXP-M1",
+   "section": "9.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If every current rule passes, the Collector accepts it as a first acceptance: 201, idempotent_replay: false, with a new receipt_id, a new received_at, and flags evaluated afresh (late_flag may be set if the Collector assesses synchronously).",
+   "anchor": "resh (`late_flag` may be set if the Collector assesses synchronously).",
+   "origin": "manual"
+  },
+  {
+   "id": "EXP-M2",
+   "section": "9.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If a current rule fails (for example the signing key has since expired, or the profile has been withdrawn), the Collector rejects it with the corresponding error.",
+   "anchor": "een withdrawn), the Collector rejects it with the corresponding error.",
+   "origin": "manual"
+  },
+  {
+   "id": "EXP-M3",
+   "section": "9.3",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "If the submission has the same identity as an expired record but different content, it is accepted as a new record.",
+   "anchor": " expired record but different content, it is accepted as a new record.",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-A1",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "A valid access token (\u00a74.2). Failure: 401 UNAUTHENTICATED.",
+   "anchor": "A valid access token (\u00a74.2). Failure: `401 UNAUTHENTICATED`.",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-A2",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "The receipt scope (\u00a74.3). Failure: 403 INSUFFICIENT_SCOPE.",
+   "anchor": "The receipt scope (\u00a74.3). Failure: `403 INSUFFICIENT_SCOPE`.",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-A3",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "An evidence domain derived from the submitter identity as in \u00a74.4.",
+   "anchor": "An evidence domain derived from the submitter identity as in \u00a74.4.",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-R1",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "The members are those of the acceptance receipt (\u00a76.3).",
+   "anchor": "The members are those of the acceptance receipt (\u00a76.3).",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-R2",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "idempotent_replay is omitted.",
+   "anchor": "`idempotent_replay` is omitted.",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-N1",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "test",
+   "statement": "Not found. 404 Not Found with RECEIPT_NOT_FOUND means that the Collector holds no receipt for that identity in the caller's evidence domain.",
+   "anchor": "or holds no receipt for that identity in the caller's evidence domain.",
+   "origin": "manual"
+  },
+  {
+   "id": "LKP-D1",
+   "section": "7.3.1",
+   "level": "mandatory",
+   "role": [
+    "producer"
+   ],
+   "capability": "receipt_lookup",
+   "verification": "behavior",
+   "statement": "If they differ, the Collector holds different content under that record identity.",
+   "anchor": "fer, the Collector holds different content under that record identity.",
+   "origin": "manual"
+  },
+  {
+   "id": "DSC-R1",
+   "section": "11.1",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The document is served over HTTPS, without authentication, as application/json, with status 200.",
+   "anchor": "TPS, without authentication, as `application/json`, with status `200`.",
+   "origin": "manual"
+  },
+  {
+   "id": "IDP-R1",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The original receipt. A replay returns the same receipt_id, received_at, content_digest, and (when the Collector returns them) integrity flags as the first acceptance, with only idempotent_replay changed to true.",
+   "anchor": "the first acceptance, with only `idempotent_replay` changed to `true`.",
+   "origin": "manual"
+  },
+  {
+   "id": "IDP-R2",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Semantically identical bytes. A resubmission that differs only in whitespace, member order, or equivalent number spelling has the same content_digest and is a replay.",
+   "anchor": "ivalent number spelling has the same `content_digest` and is a replay.",
+   "origin": "manual"
+  },
+  {
+   "id": "IDP-R5",
+   "section": "9",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Conflict only after verification. A record is judged a conflict only after it passes key and signature verification (step 13 follows step 12), so unverified content cannot probe or provoke conflicts on an identity.",
+   "anchor": "o unverified content cannot probe or provoke conflicts on an identity.",
+   "origin": "manual"
+  },
+  {
+   "id": "PRS-R1",
+   "section": "5.7",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Idempotency and conflict decisions use content_digest, so a semantically identical resubmission with different whitespace, member order, or number spelling is the same record.",
+   "anchor": "erent whitespace, member order, or number spelling is the same record.",
+   "origin": "manual"
+  },
+  {
+   "id": "DIG-R1",
+   "section": "5.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "A producer-supplied content_digest member, if present, has no effect.",
+   "anchor": " producer-supplied `content_digest` member, if present, has no effect.",
+   "origin": "manual"
+  },
+  {
+   "id": "DIG-R2",
+   "section": "5.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Digests are compared as exact strings.",
+   "anchor": "Digests are compared as exact strings.",
+   "origin": "manual"
+  },
+  {
+   "id": "DIG-R3",
+   "section": "5.5",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "Two records have the same content_digest only if they have the same canonical form.",
+   "anchor": "e the same `content_digest` only if they have the same canonical form.",
+   "origin": "manual"
+  },
+  {
+   "id": "JSN-L1",
+   "section": "5.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "invalid UTF-8, or invalid Unicode scalar values in strings;",
+   "anchor": "invalid UTF-8, or invalid Unicode scalar values in strings;",
+   "origin": "manual"
+  },
+  {
+   "id": "JSN-L2",
+   "section": "5.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "a duplicate member name at any depth (a parser that silently keeps the first or last duplicate is not acceptable for signed input);",
+   "anchor": "keeps the first or last duplicate is not acceptable for signed input);",
+   "origin": "manual"
+  },
+  {
+   "id": "JSN-L3",
+   "section": "5.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "trailing non-whitespace content after the JSON value;",
+   "anchor": "trailing non-whitespace content after the JSON value;",
+   "origin": "manual"
+  },
+  {
+   "id": "JSN-L4",
+   "section": "5.2",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "nesting deeper than max_nesting_depth.",
+   "anchor": "nesting deeper than `max_nesting_depth`.",
+   "origin": "manual"
+  },
+  {
+   "id": "RID-R1",
+   "section": "5.6",
+   "level": "mandatory",
+   "role": [
+    "collector"
+   ],
+   "capability": null,
+   "verification": "test",
+   "statement": "The record identity is (evidence domain, producer_id, record_id).",
+   "anchor": "The record identity is `(evidence domain, producer_id, record_id)`.",
+   "origin": "manual"
+  }
+ ],
+ "coverage_exceptions": {
+  "KEY-003": "inspection: a Collector may use one evaluation time or one per element. The difference shows only if a key expires during a batch, which an API test cannot arrange without a clock that advances inside one request.",
+  "SUB-002": "advisory: Location is optional. The binding sentence is a prohibition on clients depending on it.",
+  "ACC-003": "inspection: whether a Collector labels accepted records as settled or complete is a matter of its status vocabulary, not of an API response."
+ }
+}

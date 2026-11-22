@@ -1,0 +1,277 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "description": "Schemas for tests.json and requirements.json of the GovOps TRACE Collector conformance artifacts.",
+ "$defs": {
+  "tests": {
+   "type": "object",
+   "required": [
+    "artifact",
+    "version",
+    "tests"
+   ],
+   "properties": {
+    "artifact": {
+     "const": "govops-trace-collector-tests"
+    },
+    "version": {
+     "type": "string"
+    },
+    "tests": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/test"
+     }
+    }
+   }
+  },
+  "test": {
+   "type": "object",
+   "required": [
+    "id",
+    "title",
+    "class",
+    "applicability",
+    "strength",
+    "requirements",
+    "kind"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "pattern": "^[A-Z]-\\d{2}$"
+    },
+    "title": {
+     "type": "string"
+    },
+    "class": {
+     "enum": [
+      "collector",
+      "producer",
+      "forwarder"
+     ]
+    },
+    "applicability": {
+     "enum": [
+      "mandatory",
+      "conditional"
+     ]
+    },
+    "capability": {
+     "type": "string"
+    },
+    "strength": {
+     "enum": [
+      "MUST",
+      "SHOULD"
+     ]
+    },
+    "requirements": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "string"
+     }
+    },
+    "hooks_required": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "kind": {
+     "enum": [
+      "api",
+      "behavior",
+      "manual"
+     ]
+    },
+    "fixture": {
+     "type": "object"
+    },
+    "variants": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "M1",
+       "M2",
+       "M3"
+      ]
+     }
+    },
+    "steps": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/step"
+     }
+    },
+    "procedure": {
+     "type": "string"
+    },
+    "expected": {
+     "type": "string"
+    },
+    "note": {
+     "type": "string"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "api"
+       }
+      }
+     },
+     "then": {
+      "required": [
+       "steps"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "enum": [
+         "behavior",
+         "manual"
+        ]
+       }
+      }
+     },
+     "then": {
+      "required": [
+       "procedure",
+       "expected"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "applicability": {
+        "const": "conditional"
+       }
+      }
+     },
+     "then": {
+      "required": [
+       "capability"
+      ]
+     }
+    }
+   ]
+  },
+  "step": {
+   "type": "object",
+   "required": [
+    "op"
+   ],
+   "properties": {
+    "op": {
+     "enum": [
+      "submit",
+      "bulk",
+      "lookup",
+      "metadata",
+      "parallel",
+      "hook",
+      "inspect"
+     ]
+    },
+    "as": {
+     "type": "string"
+    },
+    "expect": {
+     "type": "object"
+    },
+    "label": {
+     "type": "string"
+    }
+   }
+  },
+  "requirements": {
+   "type": "object",
+   "required": [
+    "artifact",
+    "version",
+    "requirements",
+    "coverage_exceptions"
+   ],
+   "properties": {
+    "artifact": {
+     "const": "govops-trace-collector-requirements"
+    },
+    "requirements": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "id",
+       "section",
+       "level",
+       "role",
+       "verification",
+       "statement"
+      ],
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "section": {
+        "type": "string"
+       },
+       "level": {
+        "enum": [
+         "mandatory",
+         "recommended",
+         "optional"
+        ]
+       },
+       "role": {
+        "type": "array",
+        "items": {
+         "enum": [
+          "collector",
+          "producer",
+          "forwarder",
+          "client",
+          "operator",
+          "consumer"
+         ]
+        }
+       },
+       "capability": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "verification": {
+        "enum": [
+         "test",
+         "behavior",
+         "inspection",
+         "advisory"
+        ]
+       },
+       "statement": {
+        "type": "string"
+       },
+       "anchor": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "coverage_exceptions": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ }
+}

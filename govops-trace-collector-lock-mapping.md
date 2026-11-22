@@ -160,7 +160,7 @@ Ordered by dependency.
 10. **Authorization.** Add the Cedarling policies for the two TRACE endpoints and the forwarder-to-producer binding.
 11. **Chain admission.** State Lock's admission policy in MVP §8 and `design.md` Component 3 (open admission for an authorized key, pre-registration as the stronger classification). Flag, do not reject, a sentinel on a non-genesis position. Return `chain_admission`. Optionally add a registered-only policy that returns `CHAIN_NOT_REGISTERED`.
 12. **Receipt lookup (optional).** Implement the receipt endpoint and its scope, permission, and policy (§7.3.1), so producers using OTLP or Kafka can reconcile.
-13. **Conformance.** Run the standard's test suite (§15, Appendix C) in Lock's CI. Provide the `(hook)` facilities: fault injection at the commit point, record-store inspection, key revocation.
+13. **Conformance.** Run the standard's conformance artifacts (`conformance/`; specification section 15) against Lock in its CI. Lock needs the hooks that the tests name: a controllable clock, fault injection at the commit point, record-store inspection, key and chain registration, and submitter and limit configuration. Without a hook, the tests that need it are reported as unverified.
 
 ## 7. Updates to repository documents
 

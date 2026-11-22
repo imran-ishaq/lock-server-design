@@ -1,0 +1,269 @@
+{
+ "artifact": "govops-trace-collector-fixtures",
+ "version": "1",
+ "description": "Deterministic initial state for every test. A test starts from this state, applies its own `fixture` overrides, then runs its steps. Nothing here depends on wall-clock time.",
+ "clock": {
+  "now": "2026-06-11T01:00:00.000Z",
+  "note": "Frozen. It changes only through the set_clock and advance_clock hooks. Every received_at, verified_at, and key-validity decision uses this clock."
+ },
+ "collector": {
+  "issuer": "https://collector.example.org",
+  "ingestion_scope": "trace.write",
+  "receipt_scope": "trace.receipt.read",
+  "limits": {
+   "max_record_bytes": 262144,
+   "max_batch_bytes": 8388608,
+   "max_batch_records": 500,
+   "max_nesting_depth": 32
+  },
+  "execution_correlation_required": true,
+  "bulk_mixed_producers_supported": false,
+  "synchronous_integrity_flags": true,
+  "lateness_seconds": 86400,
+  "idempotency_retention_seconds": 2592000,
+  "record_retention_seconds": 34560000,
+  "content_encodings_supported": [],
+  "sender_constrained_tokens_supported": [],
+  "offers_bulk": true,
+  "offers_receipt_lookup": true,
+  "profiles": [
+   {
+    "profile": "tag:govops.owasp.org,2026:trace-v1",
+    "state": "accepted",
+    "signature_algorithms_supported": [
+     "Ed25519"
+    ],
+    "canonicalization": "RFC8785",
+    "content_digest_algorithm": "sha256",
+    "event_kinds_supported": [
+     "AUTHORIZATION_DECISION",
+     "CAPABILITY_INVOKED",
+     "RUNTIME_EFFECT"
+    ]
+   }
+  ],
+  "schema_rules": [],
+  "rate_limit": null,
+  "commit_failures": 0
+ },
+ "authorization_servers": {
+  "AS-1": {
+   "issuer": "https://auth.example.org",
+   "token_format": "jwt",
+   "client_id_claim": "client_id",
+   "scope_claim": "scope"
+  },
+  "AS-2": {
+   "issuer": "https://auth2.example.org",
+   "token_format": "introspection",
+   "client_id_claim": "client_id",
+   "scope_claim": "scope"
+  }
+ },
+ "evidence_domains": [
+  "D1",
+  "D2"
+ ],
+ "submitters": {
+  "c-pdp": {
+   "as": "AS-1",
+   "client_id": "c-pdp",
+   "scopes": [
+    "trace.write"
+   ],
+   "domain": "D1",
+   "submit_for": [
+    "pdp-fleet-1",
+    "pdp-fleet-2",
+    "pdp/fleet 1"
+   ],
+   "receipt_for": []
+  },
+  "c-pep": {
+   "as": "AS-1",
+   "client_id": "c-pep",
+   "scopes": [
+    "trace.write"
+   ],
+   "domain": "D1",
+   "submit_for": [
+    "payments-gateway-pep"
+   ],
+   "receipt_for": []
+  },
+  "c-fwd": {
+   "as": "AS-1",
+   "client_id": "c-fwd",
+   "scopes": [
+    "trace.write"
+   ],
+   "domain": "D1",
+   "submit_for": [
+    "pdp-fleet-1",
+    "payments-gateway-pep"
+   ],
+   "receipt_for": []
+  },
+  "c-ro": {
+   "as": "AS-1",
+   "client_id": "c-ro",
+   "scopes": [],
+   "domain": "D1",
+   "submit_for": [
+    "pdp-fleet-1"
+   ],
+   "receipt_for": []
+  },
+  "c-nodom": {
+   "as": "AS-1",
+   "client_id": "c-nodom",
+   "scopes": [
+    "trace.write"
+   ],
+   "domain": null,
+   "submit_for": [
+    "pdp-fleet-1"
+   ],
+   "receipt_for": []
+  },
+  "c-d2": {
+   "as": "AS-1",
+   "client_id": "c-d2",
+   "scopes": [
+    "trace.write"
+   ],
+   "domain": "D2",
+   "submit_for": [
+    "pdp-fleet-1"
+   ],
+   "receipt_for": []
+  },
+  "c-recon": {
+   "as": "AS-1",
+   "client_id": "c-recon",
+   "scopes": [
+    "trace.receipt.read"
+   ],
+   "domain": "D1",
+   "submit_for": [],
+   "receipt_for": [
+    "pdp-fleet-1",
+    "pdp/fleet 1"
+   ]
+  },
+  "as2-c-pdp": {
+   "as": "AS-2",
+   "client_id": "c-pdp",
+   "scopes": [
+    "trace.write"
+   ],
+   "domain": null,
+   "submit_for": [],
+   "receipt_for": []
+  }
+ },
+ "registry": {
+  "D1": {
+   "keys": [
+    {
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "public_jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "osMws01rURBEOGoaCDB5eFcNt7qw6sgH4y-ty1_WZ5A"
+     },
+     "algorithm": "Ed25519",
+     "authorized_event_kinds": [
+      "AUTHORIZATION_DECISION"
+     ],
+     "valid_from": "2026-01-01T00:00:00Z",
+     "valid_until": null,
+     "revoked_at": null
+    },
+    {
+     "producer_id": "payments-gateway-pep",
+     "kid": "pep-key-2026-01",
+     "public_jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "hQZQSp0mtUu3bMyZ_DEH5rJ_rPLyOtpOAniT2swqaD8"
+     },
+     "algorithm": "Ed25519",
+     "authorized_event_kinds": [
+      "CAPABILITY_INVOKED"
+     ],
+     "valid_from": "2026-01-01T00:00:00Z",
+     "valid_until": null,
+     "revoked_at": null
+    },
+    {
+     "producer_id": "pdp/fleet 1",
+     "kid": "key-sl-01",
+     "public_jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "_X0MOS5dRVOYHCbzljFrtsZ7YprvnIcRz0tuHkHVwYs"
+     },
+     "algorithm": "Ed25519",
+     "authorized_event_kinds": [
+      "AUTHORIZATION_DECISION"
+     ],
+     "valid_from": "2026-01-01T00:00:00Z",
+     "valid_until": null,
+     "revoked_at": null
+    }
+   ]
+  },
+  "D2": {
+   "keys": []
+  }
+ },
+ "variants": {
+  "M1": {
+   "description": "first_observed_genesis only; no chain registered",
+   "modes": [
+    "first_observed_genesis"
+   ],
+   "registered_chains": []
+  },
+  "M2": {
+   "description": "pre_registered_genesis only; chain-pdp-001-a registered",
+   "modes": [
+    "pre_registered_genesis"
+   ],
+   "registered_chains": [
+    {
+     "domain": "D1",
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a"
+    }
+   ]
+  },
+  "M3": {
+   "description": "both modes; chain-pdp-001-a registered",
+   "modes": [
+    "first_observed_genesis",
+    "pre_registered_genesis"
+   ],
+   "registered_chains": [
+    {
+     "domain": "D1",
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-a"
+    }
+   ]
+  }
+ },
+ "default_variant": "M1",
+ "body_generators": {
+  "oversized_record": "Take the record of `base`, add a signed string member `trace.x_pad`, assign a new record_id, re-sign with the base key, and make the serialized record exactly `limit` bytes plus `delta` (delta 0 is exactly at the limit).",
+  "deep_nesting": "Take the record of `base` and add nested objects under `trace.x_deep` until the document depth is `depth`. Re-sign.",
+  "invalid_utf8": "Serialize `base` and replace one byte inside a string with 0xC3 followed by 0x28.",
+  "truncate": "Serialize `base` and cut the text after `keep` characters.",
+  "wrap_array": "A JSON array of the listed items.",
+  "reserved_producer": "The record of V-26."
+ }
+}

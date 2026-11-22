@@ -1,0 +1,7959 @@
+{
+ "artifact": "govops-trace-collector-tests",
+ "version": "1",
+ "description": "Machine-readable conformance tests. See README.md for the step grammar and the matcher syntax.",
+ "tests": [
+  {
+   "id": "C-01",
+   "title": "First acceptance returns a complete receipt",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "SUB-S1",
+    "RCP-001",
+    "RCP-002",
+    "RCP-003",
+    "RCP-004",
+    "RCP-005",
+    "RCP-006",
+    "ORD-S15",
+    "ORD-S16",
+    "DUR-C1",
+    "DUR-C2",
+    "DUR-C3",
+    "ACC-001",
+    "PRV-004"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-02",
+   "title": "An identical resubmission returns the original receipt",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-T1",
+    "IDP-R1",
+    "SUB-S2",
+    "DUR-002",
+    "RCP-006",
+    "ORD-S10"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-03",
+   "title": "A re-serialized resubmission is the same record",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-T1",
+    "IDP-R2",
+    "PRS-R1",
+    "DIG-R2",
+    "DIG-R3"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-06",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-04",
+   "title": "Reusing an identity with different content is a conflict",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-001",
+    "IDP-005",
+    "ORD-S13",
+    "ERR-RECORD_ID_CONFLICT",
+    "SUB-S5"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-20",
+     "expect": {
+      "status": 409,
+      "code": "RECORD_ID_CONFLICT",
+      "retryable": false,
+      "problem": {
+       "existing_content_digest": "$digest:V-01",
+       "submitted_content_digest": "$digest:V-20"
+      }
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true,
+      "digest": "$digest:V-01"
+     },
+     "record": "V-01"
+    }
+   ]
+  },
+  {
+   "id": "C-05",
+   "title": "A record that fails signature verification is never accepted",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-SIGNATURE_INVALID",
+    "ORD-S12",
+    "SIG-001",
+    "ACC-001",
+    "IDP-R5",
+    "CHN-001",
+    "SUB-S3"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-10",
+     "expect": {
+      "status": 400,
+      "code": "SIGNATURE_INVALID",
+      "retryable": false
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": false
+     },
+     "record": "V-01"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-10",
+     "expect": {
+      "status": 400,
+      "code": "SIGNATURE_INVALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-06",
+   "title": "An unregistered key id is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-KEY_UNKNOWN",
+    "ORD-S11",
+    "SIG-005",
+    "PRM-004"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-11",
+     "expect": {
+      "status": 400,
+      "code": "KEY_UNKNOWN",
+      "retryable": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-07",
+   "title": "A key may sign only its authorized event kinds",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-EVENT_KIND_NOT_AUTHORIZED",
+    "ORD-S11",
+    "PRF-006",
+    "ERR-004"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-12",
+     "expect": {
+      "status": 400,
+      "code_in": [
+       "EVENT_KIND_NOT_AUTHORIZED",
+       "KEY_UNKNOWN"
+      ]
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": false
+     },
+     "record": "V-12"
+    }
+   ],
+   "note": "ERR-003 allows a Collector to collapse key-related codes into KEY_UNKNOWN."
+  },
+  {
+   "id": "C-08",
+   "title": "producer must equal producer_chain.producer_id, after submitter authorization",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-PRODUCER_IDENTITY_MISMATCH",
+    "PRF-004",
+    "ORD-S10A",
+    "ORD-S07",
+    "PRM-003",
+    "PRM-005"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-13",
+     "expect": {
+      "status": 400,
+      "code": "PRODUCER_IDENTITY_MISMATCH",
+      "retryable": false
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-fwd",
+     "body": "V-13",
+     "expect": {
+      "status": 403,
+      "code": "SUBMITTER_NOT_AUTHORIZED"
+     }
+    }
+   ],
+   "note": "c-pdp may submit for pdp-fleet-2, so step 7 passes and step 10a reports the mismatch. c-fwd may not, so step 7 reports 403 first."
+  },
+  {
+   "id": "C-09",
+   "title": "A record without the full correlation pair is rejected when it is required",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "COR-001",
+    "ERR-MISSING_EXECUTION_CONTEXT"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-14",
+     "expect": {
+      "status": 400,
+      "code": "MISSING_EXECUTION_CONTEXT",
+      "retryable": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-10",
+   "title": "An unlisted profile is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "PRF-005",
+    "ERR-UNSUPPORTED_PROFILE",
+    "ORD-S09"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-15",
+     "expect": {
+      "status": 400,
+      "code": "UNSUPPORTED_PROFILE",
+      "retryable": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-11",
+   "title": "A malformed signature encoding is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "SIG-002",
+    "ERR-SIGNATURE_MALFORMED"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-16",
+     "expect": {
+      "status": 400,
+      "code": "SIGNATURE_MALFORMED",
+      "retryable": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-12",
+   "title": "A record_id outside the canonical forms is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RID-001",
+    "RID-002",
+    "ERR-SCHEMA_INVALID",
+    "ORD-S10A"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-17",
+     "expect": {
+      "status": 400,
+      "code": "SCHEMA_INVALID",
+      "retryable": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-13",
+   "title": "A duplicate member name rejects the whole request",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "JSN-001",
+    "JSN-L2",
+    "ERR-MALFORMED_JSON",
+    "ORD-S06A",
+    "VAL-01"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-18",
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON",
+      "retryable": false
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": false
+     },
+     "record": "V-01"
+    }
+   ]
+  },
+  {
+   "id": "C-14",
+   "title": "A missing predecessor is flagged and the record is accepted",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "FLG-COVERAGE_GAP",
+    "CHN-COMPLETENESS",
+    "CHN-R2",
+    "RCP-007"
+   ],
+   "capability": "sync_flags",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-02",
+       "producer_id": "$producer:V-02",
+       "record_id": "$rid:V-02"
+      },
+      "flags": {
+       "coverage_gap": true,
+       "chain_link_failure": false,
+       "equivocation": false,
+       "late": false
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-15",
+   "title": "A predecessor hash mismatch is flagged and the record is accepted",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "FLG-CHAIN_LINK_FAILURE",
+    "CHN-INTEGRITY"
+   ],
+   "capability": "sync_flags",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-22",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-22",
+       "producer_id": "$producer:V-22",
+       "record_id": "$rid:V-22"
+      },
+      "flags": {
+       "coverage_gap": false,
+       "chain_link_failure": true,
+       "equivocation": false,
+       "late": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-16",
+   "title": "Two records at one chain position are both kept and flagged",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "FLG-EQUIVOCATION",
+    "IDP-T3",
+    "CHN-INTEGRITY"
+   ],
+   "capability": "sync_flags",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-21",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-21",
+       "producer_id": "$producer:V-21",
+       "record_id": "$rid:V-21"
+      },
+      "flags": {
+       "coverage_gap": false,
+       "chain_link_failure": false,
+       "equivocation": true,
+       "late": false
+      }
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true
+     },
+     "record": "V-01"
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true
+     },
+     "record": "V-21"
+    }
+   ]
+  },
+  {
+   "id": "C-17",
+   "title": "A missing or expired token is rejected with a challenge",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "AUT-001",
+    "ERR-UNAUTHENTICATED",
+    "ORD-S02",
+    "TOK-001",
+    "SUB-S4"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "no_token": true,
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED",
+      "headers": {
+       "WWW-Authenticate": "$present"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED",
+      "headers": {
+       "WWW-Authenticate": "$present"
+      }
+     },
+     "token": {
+      "exp": "expired"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-18",
+   "title": "A token without the ingestion scope is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "SCO-001",
+    "ERR-INSUFFICIENT_SCOPE",
+    "ORD-S03"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-ro",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "INSUFFICIENT_SCOPE"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-19",
+   "title": "A submitter with no evidence-domain binding is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DOM-002",
+    "DOM-003",
+    "ERR-EVIDENCE_DOMAIN_NOT_BOUND",
+    "ORD-S04"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-nodom",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "EVIDENCE_DOMAIN_NOT_BOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-20",
+   "title": "Submitter authorization precedes verification",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "PRM-001",
+    "PRM-003",
+    "ERR-SUBMITTER_NOT_AUTHORIZED",
+    "ORD-S07",
+    "ORD-001"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pep",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "SUBMITTER_NOT_AUTHORIZED"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pep",
+     "body": "V-10",
+     "expect": {
+      "status": 403,
+      "code": "SUBMITTER_NOT_AUTHORIZED"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-21",
+   "title": "Evidence domains are isolated",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DOM-001",
+    "DOM-008",
+    "DOM-009",
+    "DOM-010",
+    "IDP-T5",
+    "ERR-005"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-d2",
+     "body": "V-01",
+     "expect": {
+      "status": 400,
+      "code": "KEY_UNKNOWN"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "register_key",
+     "domain": "D2",
+     "key_from": "pdp-fleet-1/key-2026-01"
+    },
+    {
+     "op": "submit",
+     "as": "c-d2",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-22",
+   "title": "A forwarded record is treated as a direct one",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "CO-1",
+    "PRM-002",
+    "ORD-S07",
+    "CO-2"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-fwd",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-fwd",
+     "body": "V-03",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-03",
+       "producer_id": "$producer:V-03",
+       "record_id": "$rid:V-03"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-23",
+   "title": "A failed commit leaves nothing visible and is safe to retry",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DUR-004",
+    "DUR-005",
+    "ERR-COLLECTOR_UNAVAILABLE",
+    "ORD-S15",
+    "ERR-001",
+    "SUB-S7",
+    "CO-4"
+   ],
+   "hooks_required": [
+    "fault injection at the commit point"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "fail_commit",
+     "count": 1
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 503,
+      "code": "COLLECTOR_UNAVAILABLE",
+      "retryable": true
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-24",
+   "title": "Record size limit is enforced and inclusive",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "LIM-RECORD",
+    "ERR-RECORD_TOO_LARGE",
+    "LIM-002",
+    "DSM-009",
+    "SUB-S6"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "oversized_record": {
+        "base": "V-01",
+        "limit": "max_record_bytes",
+        "delta": 1
+       }
+      }
+     },
+     "expect": {
+      "status": 413,
+      "code": "RECORD_TOO_LARGE",
+      "retryable": false
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "oversized_record": {
+        "base": "V-01",
+        "limit": "max_record_bytes",
+        "delta": 0
+       }
+      }
+     },
+     "expect": {
+      "status": 201
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-25",
+   "title": "Unsupported media type or content encoding is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "WIR-001",
+    "WIR-003",
+    "ERR-UNSUPPORTED_MEDIA_TYPE",
+    "ORD-S05",
+    "SUB-S6"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "content_type": "text/plain",
+     "expect": {
+      "status": 415,
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "content_encoding": "gzip",
+     "expect": {
+      "status": 415,
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-26",
+   "title": "An evidence_domain_id in the body plays no part",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DOM-005",
+    "DOM-006",
+    "PRF-007"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-05",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-05",
+       "producer_id": "$producer:V-05",
+       "record_id": "$rid:V-05"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true
+     },
+     "record": "V-05"
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D2",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-27",
+   "title": "Concurrent identical submissions yield one acceptance",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-004",
+    "IDP-T1"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "parallel",
+     "requests": [
+      {
+       "as": "c-pdp",
+       "body": "V-01"
+      },
+      {
+       "as": "c-pdp",
+       "body": "V-01"
+      }
+     ],
+     "expect": {
+      "statuses": [
+       200,
+       201
+      ],
+      "one_receipt": true
+     }
+    }
+   ],
+   "note": "The reference model runs the requests in turn. A real Collector runs them concurrently and must return the same outcome set."
+  },
+  {
+   "id": "C-28",
+   "title": "A replay survives later key revocation; a new record does not",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "KEY-007",
+    "IDP-002",
+    "ERR-KEY_NOT_VALID",
+    "KEY-R1"
+   ],
+   "hooks_required": [
+    "registry (revoke key)"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "revoked_at": "2026-06-11T01:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-29",
+   "title": "Every error is a well-formed Problem Details object",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "PRB-001",
+    "PRB-002",
+    "PRB-003",
+    "PRB-004",
+    "PRB-005",
+    "PRB-010",
+    "ERR-006",
+    "ERR-002",
+    "PRV-006"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-10",
+     "expect": {
+      "status": 400,
+      "code": "SIGNATURE_INVALID"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-11",
+     "expect": {
+      "status": 400,
+      "code": "KEY_UNKNOWN"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-ro",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "INSUFFICIENT_SCOPE"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "raw": "{"
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    }
+   ],
+   "note": "The runner checks type, title, status, code, retryable, the status and retryable values of the error table, and the absence of tokens and signatures in every error body."
+  },
+  {
+   "id": "C-30",
+   "title": "Receipt identifiers and timestamp have the required form",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RCP-004",
+    "RCP-005",
+    "RCP-011",
+    "RCP-012"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "received_at": "$ms_ts",
+       "receipt_id": "$nonempty"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-31",
+   "title": "A cleartext request is not served",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "TRN-001",
+    "TRN-002",
+    "ORD-S01"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "scheme": "http",
+     "expect": {
+      "status": "refused"
+     }
+    }
+   ],
+   "note": "The model returns the status 'refused' for any non-TLS request."
+  },
+  {
+   "id": "C-32",
+   "title": "A record that fails verification is never accepted, even if quarantined",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ACC-001",
+    "ACC-002",
+    "IDP-006"
+   ],
+   "hooks_required": [
+    "quarantine inspection"
+   ],
+   "kind": "manual",
+   "procedure": "On a Collector that quarantines, submit V-10. Inspect retrieval, correlation, and the receipt store.",
+   "expected": "The response is a rejection with no receipt. The record is absent from retrieval and correlation."
+  },
+  {
+   "id": "C-33",
+   "title": "A Collector killed before the durable commit returns no receipt",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DUR-001",
+    "DUR-003",
+    "ORD-S15"
+   ],
+   "hooks_required": [
+    "process kill at the commit point"
+   ],
+   "kind": "manual",
+   "procedure": "Kill the Collector between receiving V-01 and the durable commit. Restart. Resubmit V-01.",
+   "expected": "No receipt was returned before the kill. After restart, resubmission is a first acceptance (201, idempotent_replay false)."
+  },
+  {
+   "id": "C-34",
+   "title": "The stored assertion equals the submitted record",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "CO-3",
+    "PRS-001",
+    "PRS-002",
+    "PRF-008",
+    "ACC-004"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-fwd",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-fwd",
+     "body": "V-03",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-03",
+       "producer_id": "$producer:V-03",
+       "record_id": "$rid:V-03"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true,
+      "digest": "$digest:V-01"
+     },
+     "record": "V-01"
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true,
+      "digest": "$digest:V-03"
+     },
+     "record": "V-03"
+    }
+   ]
+  },
+  {
+   "id": "C-35",
+   "title": "An asynchronous Collector omits the four flags and still assesses",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ASY-002",
+    "ASY-008",
+    "ASY-003",
+    "RCP-007"
+   ],
+   "capability": "async_flags",
+   "hooks_required": [
+    "assessment interface"
+   ],
+   "fixture": {
+    "collector": {
+     "synchronous_integrity_flags": false
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-02",
+       "producer_id": "$producer:V-02",
+       "record_id": "$rid:V-02"
+      }
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "assessment",
+     "domain": "D1",
+     "expect": {
+      "present": true,
+      "coverage_gap_flag": true
+     },
+     "record": "V-02"
+    }
+   ]
+  },
+  {
+   "id": "C-36",
+   "title": "An asynchronous Collector never rejects for chain reasons",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ASY-002",
+    "ASY-006",
+    "ASY-007",
+    "CHN-R2"
+   ],
+   "capability": "async_flags",
+   "hooks_required": [
+    "assessment interface"
+   ],
+   "fixture": {
+    "collector": {
+     "synchronous_integrity_flags": false
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-22",
+     "expect": {
+      "status": 201
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-21",
+     "expect": {
+      "status": 201
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "assessment",
+     "domain": "D1",
+     "expect": {
+      "chain_link_failure_flag": true
+     },
+     "record": "V-22"
+    },
+    {
+     "op": "inspect",
+     "what": "assessment",
+     "domain": "D1",
+     "expect": {
+      "equivocation_flag": true
+     },
+     "record": "V-21"
+    },
+    {
+     "op": "inspect",
+     "what": "assessment",
+     "domain": "D1",
+     "expect": {
+      "equivocation_flag": true
+     },
+     "record": "V-01"
+    }
+   ]
+  },
+  {
+   "id": "C-37",
+   "title": "A non-object single body is a schema failure; broken JSON is malformed",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "JSN-R1",
+    "VAL-03",
+    "VAL-01",
+    "ORD-S06B",
+    "ORD-S06A"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "raw": "42"
+     },
+     "expect": {
+      "status": 400,
+      "code": "SCHEMA_INVALID"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": [
+      "V-01"
+     ],
+     "expect": {
+      "status": 400,
+      "code": "SCHEMA_INVALID"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "raw": "{"
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-38",
+   "title": "Authorization is evaluated before the body is parsed",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ORD-001",
+    "DOM-007",
+    "ORD-S02",
+    "ORD-S03",
+    "ORD-S04",
+    "ORD-S06A"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "no_token": true,
+     "body": {
+      "raw": "{"
+     },
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-ro",
+     "body": {
+      "raw": "{"
+     },
+     "expect": {
+      "status": 403,
+      "code": "INSUFFICIENT_SCOPE"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-nodom",
+     "body": {
+      "raw": "{"
+     },
+     "expect": {
+      "status": 403,
+      "code": "EVIDENCE_DOMAIN_NOT_BOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-39",
+   "title": "Key validity uses the Collector clock, not signed_at",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "KEY-R0",
+    "KEY-001",
+    "KEY-002",
+    "KEY-R1",
+    "KEY-004",
+    "SEC-001",
+    "SIG-006"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_from": "2026-06-12T00:00:00.000Z"
+    },
+    {
+     "op": "hook",
+     "action": "set_clock",
+     "value": "2026-06-12T00:00:01.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-40",
+   "title": "A record delivered after key expiry is rejected, and recovers when validity is extended",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-KEY_NOT_VALID",
+    "KEY-R1",
+    "KEY-R0"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_until": "2026-06-11T00:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID",
+      "retryable": false
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_until": "2026-06-13T00:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-41",
+   "title": "valid_from is inclusive and valid_until is exclusive",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "KEY-R1",
+    "ERR-KEY_NOT_VALID"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_from": "2026-06-11T01:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_until": "2026-06-11T01:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-42",
+   "title": "A replay after expiry keeps the original decision",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "KEY-007",
+    "KEY-005",
+    "KEY-004",
+    "IDP-002",
+    "KEY-R2"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_until": "2026-06-11T01:00:01.000Z"
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 2
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "stored",
+     "domain": "D1",
+     "expect": {
+      "present": true,
+      "key": [
+       "pdp-fleet-1",
+       "key-2026-01"
+      ],
+      "verified_at": "2026-06-11T01:00:00.000Z",
+      "received_at": "2026-06-11T01:00:00.000Z"
+     },
+     "record": "V-01"
+    }
+   ]
+  },
+  {
+   "id": "C-43",
+   "title": "Client-supplied times are ignored for key validity",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "KEY-001",
+    "KEY-002",
+    "WIR-005"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_until": "2026-06-11T00:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "headers": {
+      "Date": "Thu, 11 Jun 2026 00:30:00 GMT",
+      "X-Audit-Time": "2026-06-11T00:30:00Z"
+     },
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-44",
+   "title": "A record signed before revocation but first presented after it is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "KEY-R1",
+    "ERR-KEY_NOT_VALID",
+    "KEY-001"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "revoked_at": "2026-06-11T01:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-45",
+   "title": "Concurrent submissions with one identity and different content yield one acceptance",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-004",
+    "IDP-001"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "parallel",
+     "requests": [
+      {
+       "as": "c-pdp",
+       "body": "V-01"
+      },
+      {
+       "as": "c-pdp",
+       "body": "V-20"
+      }
+     ],
+     "expect": {
+      "statuses": [
+       201,
+       409
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-46",
+   "title": "Unsupported algorithm is rejected before verification",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "SIG-003",
+    "SIG-004",
+    "ERR-UNSUPPORTED_ALGORITHM",
+    "PRF-001",
+    "PRF-002",
+    "PRF-003",
+    "DSP-007",
+    "DSP-008",
+    "SEC-004",
+    "SIG-001"
+   ],
+   "hooks_required": [
+    "registry (register key)"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "register_key",
+     "domain": "D1",
+     "key_from": "pdp-fleet-1/key-2026-01",
+     "patch": {
+      "kid": "key-es-01",
+      "algorithm": "ES256"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "variant": {
+        "base": "V-01",
+        "set": {
+         "kid": "key-es-01"
+        },
+        "sign_with": "pdp-fleet-1/key-2026-01"
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "UNSUPPORTED_ALGORITHM"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-47",
+   "title": "Quiet limits: nothing is accepted from a record that is too deep",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "LIM-DEPTH",
+    "ERR-MALFORMED_JSON",
+    "JSN-L4",
+    "LIM-002"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "deep_nesting": {
+        "base": "V-01",
+        "depth": 40
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-48",
+   "title": "Invalid UTF-8 rejects the request",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "JSN-L1",
+    "VAL-01",
+    "ERR-MALFORMED_JSON"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "invalid_utf8": {
+        "base": "V-01"
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-49",
+   "title": "A record is accepted from a producer with reserved characters in its identifier",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RID-R1",
+    "PRM-001"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-26",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-26",
+       "producer_id": "$producer:V-26",
+       "record_id": "$rid:V-26"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-50",
+   "title": "A record lacking required members is a schema failure",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-SCHEMA_INVALID",
+    "ORD-S10A",
+    "PRF-004"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-25",
+     "expect": {
+      "status": 400,
+      "code": "SCHEMA_INVALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-01",
+   "title": "A JWT access token (client credentials) is accepted as a bearer token",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "AUT-M1",
+    "AUT-M2",
+    "AUT-001",
+    "IDN-005",
+    "TOK-001",
+    "AUT-003"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-02",
+   "title": "The same client_id at another authorization server is a different submitter",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-001",
+    "IDN-002",
+    "DOM-002",
+    "IDN-R1"
+   ],
+   "capability": "multi_as",
+   "fixture": {
+    "authorization_servers": {
+     "AS-2": {
+      "token_format": "jwt"
+     }
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "EVIDENCE_DOMAIN_NOT_BOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-03",
+   "title": "Bindings are per (issuer, client_id)",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-001",
+    "IDN-002",
+    "DOM-001",
+    "DOM-010",
+    "IDP-T5"
+   ],
+   "capability": "multi_as",
+   "hooks_required": [
+    "submitter bindings",
+    "registry (register key)"
+   ],
+   "fixture": {
+    "authorization_servers": {
+     "AS-2": {
+      "token_format": "jwt"
+     }
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "as2-c-pdp",
+     "patch": {
+      "domain": "D2",
+      "submit_for": [
+       "pdp-fleet-1"
+      ]
+     }
+    },
+    {
+     "op": "hook",
+     "action": "register_key",
+     "domain": "D2",
+     "key_from": "pdp-fleet-1/key-2026-01"
+    },
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-04",
+   "title": "Producer permission is per (issuer, client_id)",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-002",
+    "PRM-001",
+    "PRM-003"
+   ],
+   "capability": "multi_as",
+   "hooks_required": [
+    "submitter bindings"
+   ],
+   "fixture": {
+    "authorization_servers": {
+     "AS-2": {
+      "token_format": "jwt"
+     }
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "as2-c-pdp",
+     "patch": {
+      "domain": "D1",
+      "submit_for": []
+     }
+    },
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "SUBMITTER_NOT_AUTHORIZED"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-05",
+   "title": "A token from an unlisted issuer is rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-005",
+    "ERR-UNAUTHENTICATED"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "iss": "https://evil.example",
+      "signer": "https://evil.example"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-06",
+   "title": "Key confusion, alg none, symmetric algorithms and header-supplied keys are rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "AUT-004",
+    "IDN-005",
+    "TOK-001",
+    "AUT-M2"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "signer": "https://auth2.example.org"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "alg": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "alg": "HS256"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "header_params": [
+       "jku"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-07",
+   "title": "The client identifier is not taken from sub",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-007",
+    "IDN-004"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "claims": {
+       "client_id": null,
+       "sub": "c-pdp"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-08",
+   "title": "The client identifier claim follows the server's token profile",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-004",
+    "IDN-005",
+    "DSA-003"
+   ],
+   "capability": "configurable_client_id_claim",
+   "hooks_required": [
+    "authorization server profile"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_as",
+     "as": "AS-1",
+     "patch": {
+      "client_id_claim": "azp"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "EVIDENCE_DOMAIN_NOT_BOUND"
+     },
+     "token": {
+      "claims": {
+       "azp": "c-unknown"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-09",
+   "title": "Headers, body, and certificates do not supply the identity",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-008",
+    "WIR-005"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-nodom",
+     "body": "V-01",
+     "headers": {
+      "X-Client-Id": "c-pdp",
+      "X-Forwarded-Client": "c-pdp"
+     },
+     "expect": {
+      "status": 403,
+      "code": "EVIDENCE_DOMAIN_NOT_BOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-10",
+   "title": "Expired, not-yet-valid, and wrong-audience tokens are rejected",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "TOK-001",
+    "TOK-002",
+    "ERR-UNAUTHENTICATED"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED",
+      "headers": {
+       "WWW-Authenticate": "invalid_token"
+      }
+     },
+     "token": {
+      "exp": "expired"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "nbf": "future"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "aud": [
+       "https://other.example"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-11",
+   "title": "Introspection: inactive, active, and unavailable",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "TOK-003",
+    "TOK-004",
+    "IDN-006",
+    "ERR-COLLECTOR_UNAVAILABLE",
+    "AUT-006"
+   ],
+   "capability": "introspection",
+   "hooks_required": [
+    "submitter bindings"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "as2-c-pdp",
+     "patch": {
+      "domain": "D1",
+      "submit_for": [
+       "pdp-fleet-1"
+      ]
+     }
+    },
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "introspection": {
+       "active": false
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 503,
+      "code": "COLLECTOR_UNAVAILABLE",
+      "headers": {
+       "Retry-After": "$present"
+      }
+     },
+     "token": {
+      "introspection": "unavailable"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-12",
+   "title": "An introspection issuer that differs from the queried server is rejected",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-006"
+   ],
+   "capability": "introspection",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "as2-c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "introspection": {
+       "iss": "https://auth.example.org"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-13",
+   "title": "A token with an unverifiable cnf is never accepted as a bearer token",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "AUT-005",
+    "AUT-M3",
+    "SCT-002",
+    "SCT-003"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "cnf": "dpop",
+      "cnf_proof": false
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "cnf": "dpop",
+      "cnf_proof": true
+     }
+    }
+   ],
+   "note": "The fixture Collector supports no sender-constrained mechanism, so even a token with a proof is rejected."
+  },
+  {
+   "id": "A-14",
+   "title": "Tokens in the query string or body are not accepted",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "AUT-002"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "location": "query"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "location": "body"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-15",
+   "title": "A user token acting through a client yields the client identity",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-004",
+    "IDN-007"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "token": {
+      "claims": {
+       "sub": "c-pep"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-16",
+   "title": "A DPoP-bound token with a verified proof is accepted",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "SCT-002",
+    "DSM-006"
+   ],
+   "capability": "sender_constrained",
+   "fixture": {
+    "collector": {
+     "sender_constrained_tokens_supported": [
+      "dpop"
+     ]
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "token": {
+      "cnf": "dpop",
+      "cnf_proof": true
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "cnf": "dpop",
+      "cnf_proof": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-17",
+   "title": "Aggregated check: the identity pair is never reduced to client_id",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDN-003"
+   ],
+   "hooks_required": [
+    "Collector configuration review"
+   ],
+   "kind": "manual",
+   "procedure": "Inspect the Collector's binding and permission configuration for AS-1 and AS-2 clients that share a client_id.",
+   "expected": "Bindings and permissions are keyed by the pair, or by an unambiguous encoding of it, and never by client_id alone."
+  },
+  {
+   "id": "G-01",
+   "title": "M1: unregistered chains are admitted at first sight",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-M1",
+    "ADM-001",
+    "CHN-ADMISSION",
+    "DSM-013"
+   ],
+   "capability": "chain_mode:first_observed",
+   "fixture": {
+    "variant": "M1"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01",
+       "chain_admission": "$opt:first_observed_genesis"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-04",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-04",
+       "producer_id": "$producer:V-04",
+       "record_id": "$rid:V-04"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-02",
+   "title": "M1: a non-genesis first record is admitted and flagged",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-R2",
+    "FLG-COVERAGE_GAP"
+   ],
+   "capability": "chain_mode:first_observed",
+   "fixture": {
+    "variant": "M1"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-24",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-24",
+       "producer_id": "$producer:V-24",
+       "record_id": "$rid:V-24"
+      },
+      "flags": {
+       "coverage_gap": true,
+       "chain_link_failure": false,
+       "equivocation": false,
+       "late": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-03",
+   "title": "M2: unregistered chains are rejected, genesis or not",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-M2",
+    "ERR-CHAIN_NOT_REGISTERED",
+    "ORD-S14",
+    "CHN-ADMISSION",
+    "CHN-R4"
+   ],
+   "capability": "chain_mode:pre_registered",
+   "fixture": {
+    "variant": "M2"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-04",
+     "expect": {
+      "status": 400,
+      "code": "CHAIN_NOT_REGISTERED",
+      "retryable": false
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-24",
+     "expect": {
+      "status": 400,
+      "code": "CHAIN_NOT_REGISTERED"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-04",
+   "title": "M2: a registered chain is admitted in any arrival order",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-M2",
+    "CHN-R1",
+    "CHN-R2"
+   ],
+   "capability": "chain_mode:pre_registered",
+   "fixture": {
+    "variant": "M2"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-02",
+       "producer_id": "$producer:V-02",
+       "record_id": "$rid:V-02"
+      },
+      "flags": {
+       "coverage_gap": true,
+       "chain_link_failure": false,
+       "equivocation": false,
+       "late": false
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-05",
+   "title": "M2: registering a chain lets the same bytes be accepted",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-R3",
+    "ERR-CHAIN_NOT_REGISTERED"
+   ],
+   "capability": "chain_mode:pre_registered",
+   "hooks_required": [
+    "chain registration"
+   ],
+   "fixture": {
+    "variant": "M2"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-05",
+     "expect": {
+      "status": 400,
+      "code": "CHAIN_NOT_REGISTERED"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "register_chain",
+     "producer_id": "pdp-fleet-1",
+     "producer_instance_id": "pdp-001",
+     "producer_chain_id": "chain-pdp-001-d"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-05",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-05",
+       "producer_id": "$producer:V-05",
+       "record_id": "$rid:V-05"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-06",
+   "title": "M3: registered chains are pre-registered, others first observed",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-M3",
+    "ADM-002",
+    "ADM-003"
+   ],
+   "capability": "chain_mode:both",
+   "fixture": {
+    "variant": "M3"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01",
+       "chain_admission": "$opt:pre_registered_genesis"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-04",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-04",
+       "producer_id": "$producer:V-04",
+       "record_id": "$rid:V-04",
+       "chain_admission": "$opt:first_observed_genesis"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-07",
+   "title": "A record that fails verification creates no chain state",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "CHN-001",
+    "ADM-R3"
+   ],
+   "capability": "chain_mode:first_observed",
+   "fixture": {
+    "variant": "M1"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-10",
+     "expect": {
+      "status": 400,
+      "code": "SIGNATURE_INVALID"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "chain_known",
+     "domain": "D1",
+     "producer": "pdp-fleet-1",
+     "chain": "chain-pdp-001-a",
+     "expect": {
+      "known": false
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-08",
+   "title": "A genesis sentinel on a non-genesis position is flagged in every mode",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FLG-CHAIN_LINK_FAILURE",
+    "FLG-COVERAGE_GAP",
+    "CHN-INTEGRITY"
+   ],
+   "variants": [
+    "M1",
+    "M2",
+    "M3"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-23",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-23",
+       "producer_id": "$producer:V-23",
+       "record_id": "$rid:V-23"
+      },
+      "flags": {
+       "coverage_gap": true,
+       "chain_link_failure": true,
+       "equivocation": false,
+       "late": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-09",
+   "title": "An admitted chain stays admitted after its registration is removed",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-R1"
+   ],
+   "capability": "chain_mode:pre_registered",
+   "hooks_required": [
+    "chain registration"
+   ],
+   "fixture": {
+    "variant": "M2"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "unregister_chain",
+     "producer_chain_id": "chain-pdp-001-a"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-02",
+       "producer_id": "$producer:V-02",
+       "record_id": "$rid:V-02"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "G-10",
+   "title": "Admission does not depend on arrival order",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "CHN-R1",
+    "CHN-R2",
+    "CHN-ADMISSION"
+   ],
+   "variants": [
+    "M1",
+    "M2",
+    "M3"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-02",
+       "producer_id": "$producer:V-02",
+       "record_id": "$rid:V-02"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-01",
+   "title": "The replay retention period is published and at least one day",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RET-002",
+    "DSM-017",
+    "RET-006"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "present": [
+        "idempotency_retention_seconds"
+       ],
+       "min": {
+        "idempotency_retention_seconds": 86400
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-02",
+   "title": "A replay is answered until the retention period ends",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RET-001",
+    "IDP-T1"
+   ],
+   "hooks_required": [
+    "Collector clock"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 2591999
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-03",
+   "title": "Replay data lasts as long as the record",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RET-004",
+    "RET-001"
+   ],
+   "hooks_required": [
+    "Collector clock"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 8640000
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-04",
+   "title": "After the record is deleted, a resubmission is a new acceptance",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "EXP-M1",
+    "EXP-001",
+    "ORD-S10"
+   ],
+   "hooks_required": [
+    "Collector clock"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 34646400
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$ne:r1.receipt_id",
+       "content_digest": "$digest:V-01"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-05",
+   "title": "After deletion, same identity with different content is accepted",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "EXP-M3"
+   ],
+   "hooks_required": [
+    "Collector clock"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 34646400
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-20",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "content_digest": "$digest:V-20"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-06",
+   "title": "After deletion, current rules apply and nothing is reported as previously accepted",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "EXP-M2",
+    "ERR-KEY_NOT_VALID"
+   ],
+   "hooks_required": [
+    "Collector clock",
+    "registry"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 34646400
+    },
+    {
+     "op": "hook",
+     "action": "set_key",
+     "producer_id": "pdp-fleet-1",
+     "kid": "key-2026-01",
+     "valid_until": "2026-12-31T00:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 400,
+      "code": "KEY_NOT_VALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-07",
+   "title": "A tightened schema rule does not affect a replay",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-001",
+    "RPR-T5",
+    "RPR-T6",
+    "ORD-R2"
+   ],
+   "hooks_required": [
+    "schema rules"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "add_schema_rule",
+     "rule": {
+      "require_member": "trace.policy.policy_store_owner"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 400,
+      "code": "SCHEMA_INVALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-08",
+   "title": "A withdrawn profile still answers replays",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-002",
+    "DSM-018",
+    "RPR-T4",
+    "ERR-UNSUPPORTED_PROFILE"
+   ],
+   "capability": "profile_withdrawal",
+   "hooks_required": [
+    "profile list"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "set_profile_state",
+     "profile": "tag:govops.owasp.org,2026:trace-v1",
+     "state": "replay_only"
+    },
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "present": [
+        "trace_profiles_replay_only"
+       ],
+       "equals": {
+        "trace_profiles_replay_only": [
+         "tag:govops.owasp.org,2026:trace-v1"
+        ]
+       }
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 400,
+      "code": "UNSUPPORTED_PROFILE"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-09",
+   "title": "A profile stays replay-only until its records pass retention",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-002",
+    "DSM-018"
+   ],
+   "capability": "profile_withdrawal",
+   "hooks_required": [
+    "profile list",
+    "Collector clock"
+   ],
+   "kind": "manual",
+   "procedure": "Withdraw the profile of V-01 (replay-only). Check the metadata. Advance the clock past received_at plus idempotency_retention_seconds for every accepted record of that profile.",
+   "expected": "Until that point the profile is in trace_profiles_replay_only and V-01 is still a replay. Only afterwards may it leave the list."
+  },
+  {
+   "id": "R-10",
+   "title": "A reduced size limit applies to a resubmission, and the acceptance stands",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-T3",
+    "RPR-003",
+    "ERR-RECORD_TOO_LARGE"
+   ],
+   "hooks_required": [
+    "limits"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "sized_record": {
+        "base": "V-01",
+        "bytes": 100000
+       }
+      }
+     },
+     "expect": {
+      "status": 201
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "set_limit",
+     "name": "max_record_bytes",
+     "value": 65536
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "sized_record": {
+        "base": "V-01",
+        "bytes": 100000
+       }
+      }
+     },
+     "expect": {
+      "status": 413,
+      "code": "RECORD_TOO_LARGE"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_limit",
+     "name": "max_record_bytes",
+     "value": 262144
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "sized_record": {
+        "base": "V-01",
+        "bytes": 100000
+       }
+      }
+     },
+     "expect": {
+      "status": 200
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-11",
+   "title": "A replay is answered only to a currently authorized submitter",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-T1",
+    "IDP-003",
+    "PRM-003"
+   ],
+   "hooks_required": [
+    "submitter permissions"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "c-pdp",
+     "patch": {
+      "submit_for": []
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "SUBMITTER_NOT_AUTHORIZED"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-12",
+   "title": "A changed registration mode does not affect a replay",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-T7",
+    "ADM-R1"
+   ],
+   "hooks_required": [
+    "registration mode"
+   ],
+   "fixture": {
+    "variant": "M1"
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "hook",
+     "action": "set_modes",
+     "modes": [
+      "pre_registered_genesis"
+     ]
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-04",
+     "expect": {
+      "status": 400,
+      "code": "CHAIN_NOT_REGISTERED"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-13",
+   "title": "Replays and new records in one batch",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-003",
+    "IDP-T1",
+    "BLR-001"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-02",
+      "V-01"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": true,
+         "received_at": "$same:r1",
+         "receipt_id": "$same:r1",
+         "content_digest": "$digest:V-01",
+         "record_id": "$rid:V-01"
+        }
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": true,
+         "received_at": "$same:r1",
+         "receipt_id": "$same:r1",
+         "content_digest": "$digest:V-01",
+         "record_id": "$rid:V-01"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-14",
+   "title": "A moved evidence-domain binding evaluates the record in the new domain",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-T1",
+    "DOM-001",
+    "IDP-T5"
+   ],
+   "hooks_required": [
+    "submitter bindings",
+    "registry (register key)"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "c-pdp",
+     "patch": {
+      "domain": "D2"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 400,
+      "code": "KEY_UNKNOWN"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "register_key",
+     "domain": "D2",
+     "key_from": "pdp-fleet-1/key-2026-01"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-15",
+   "title": "Both responses to a replay carry the same snapshot",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-R1",
+    "RCP-007",
+    "ASY-005"
+   ],
+   "capability": "sync_flags",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-02",
+       "producer_id": "$producer:V-02",
+       "record_id": "$rid:V-02"
+      },
+      "flags": {
+       "coverage_gap": true,
+       "chain_link_failure": false,
+       "equivocation": false,
+       "late": false
+      }
+     },
+     "label": "r1"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "idempotent_replay": true,
+       "received_at": "$same:r1",
+       "receipt_id": "$same:r1",
+       "content_digest": "$digest:V-02",
+       "record_id": "$rid:V-02"
+      },
+      "flags": {
+       "coverage_gap": true,
+       "chain_link_failure": false,
+       "equivocation": false,
+       "late": false
+      }
+     }
+    }
+   ],
+   "note": "V-01 arrives later and closes the gap, but the replay of V-02 still reports the flags as of its acceptance."
+  },
+  {
+   "id": "L-01",
+   "title": "Metadata publishes the lookup endpoint and a distinct receipt scope",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "DSM-015",
+    "DSM-016",
+    "SCO-006"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "receipt_template": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-02",
+   "title": "A lookup returns the stored receipt and nothing else",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-R1",
+    "LKP-R2",
+    "LKP-002",
+    "LKP-A1",
+    "LKP-A2",
+    "LKP-A3",
+    "DUR-002",
+    "PRV-004",
+    "LKP-003"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "receipt_id": "$same:r1.receipt_id",
+       "received_at": "$same:r1.received_at",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01",
+       "producer_id": "$producer:V-01"
+      },
+      "flags": "none",
+      "lookup": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-03",
+   "title": "A replay does not change the stored receipt",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-R1",
+    "IDP-R1"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "receipt_id": "$same:r1.receipt_id",
+       "received_at": "$same:r1.received_at",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01",
+       "producer_id": "$producer:V-01"
+      },
+      "flags": "none",
+      "lookup": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-04",
+   "title": "An unknown record is not found",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-N1",
+    "ERR-RECEIPT_NOT_FOUND"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-02",
+     "expect": {
+      "status": 404,
+      "code": "RECEIPT_NOT_FOUND",
+      "retryable": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-05",
+   "title": "A rejected record leaves no receipt",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-N1",
+    "ACC-001"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-10",
+     "expect": {
+      "status": 400,
+      "code": "SIGNATURE_INVALID"
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-10",
+     "expect": {
+      "status": 404,
+      "code": "RECEIPT_NOT_FOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-06",
+   "title": "The receipt scope and the ingestion scope are separate",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "SCO-005",
+    "LKP-A2",
+    "SCO-006"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "lookup",
+     "as": "c-pdp",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "INSUFFICIENT_SCOPE"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-recon",
+     "body": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "INSUFFICIENT_SCOPE"
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-07",
+   "title": "Without receipt-read permission, existing and absent records look the same",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-004",
+    "ERR-RECEIPT_ACCESS_DENIED",
+    "PRB-011",
+    "IDP-003"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pep",
+     "body": "V-03",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-03",
+       "producer_id": "$producer:V-03",
+       "record_id": "$rid:V-03"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "payments-gateway-pep",
+     "record": "V-03",
+     "expect": {
+      "status": 403,
+      "code": "RECEIPT_ACCESS_DENIED",
+      "retryable": false
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "payments-gateway-pep",
+     "record": "V-02",
+     "expect": {
+      "status": 403,
+      "code": "RECEIPT_ACCESS_DENIED",
+      "retryable": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-08",
+   "title": "A lookup never sees another evidence domain",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "DOM-009",
+    "LKP-A3",
+    "DOM-008"
+   ],
+   "capability": "receipt_lookup",
+   "hooks_required": [
+    "submitter bindings"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "c-d2",
+     "patch": {
+      "scopes": [
+       "trace.receipt.read"
+      ],
+      "receipt_for": [
+       "pdp-fleet-1"
+      ]
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-d2",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 404,
+      "code": "RECEIPT_NOT_FOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-09",
+   "title": "Authentication and domain errors apply to lookups",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-A1",
+    "LKP-A3",
+    "ERR-EVIDENCE_DOMAIN_NOT_BOUND"
+   ],
+   "capability": "receipt_lookup",
+   "hooks_required": [
+    "submitter bindings"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "lookup",
+     "no_token": true,
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 401,
+      "code": "UNAUTHENTICATED"
+     },
+     "token": {
+      "exp": "expired"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "set_submitter",
+     "name": "c-nodom",
+     "patch": {
+      "scopes": [
+       "trace.receipt.read"
+      ],
+      "receipt_for": [
+       "pdp-fleet-1"
+      ]
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-nodom",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 403,
+      "code": "EVIDENCE_DOMAIN_NOT_BOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-10",
+   "title": "A conflicting submission does not change the stored receipt",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-D1",
+    "IDP-001",
+    "LKP-R1"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-20",
+     "expect": {
+      "status": 409,
+      "code": "RECORD_ID_CONFLICT"
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "receipt_id": "$same:r1.receipt_id",
+       "received_at": "$same:r1.received_at",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01",
+       "producer_id": "$producer:V-01"
+      },
+      "flags": "none",
+      "lookup": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-11",
+   "title": "After deletion the receipt is not found",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-N1",
+    "EXP-001"
+   ],
+   "capability": "receipt_lookup",
+   "hooks_required": [
+    "Collector clock"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "hook",
+     "action": "advance_clock",
+     "seconds": 34646400
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 404,
+      "code": "RECEIPT_NOT_FOUND"
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-12",
+   "title": "A producer identifier with reserved characters is addressed by percent-encoding",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-002",
+    "RID-R1"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-26",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-26",
+       "producer_id": "$producer:V-26",
+       "record_id": "$rid:V-26"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp%2Ffleet%201",
+     "record": "V-26",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "producer_id": "pdp/fleet 1",
+       "content_digest": "$digest:V-26"
+      },
+      "lookup": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-13",
+   "title": "A 404 is not cacheable; a 200 is at most private",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-008",
+    "LKP-007"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 404,
+      "headers": {
+       "Cache-Control": "no-store"
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-14",
+   "title": "Lookups are rate limited",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "SHOULD",
+   "requirements": [
+    "LKP-009"
+   ],
+   "capability": "receipt_lookup",
+   "hooks_required": [
+    "rate limit"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_rate_limit",
+     "max_requests": 2
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 404
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 404
+     }
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 429,
+      "code": "RATE_LIMITED",
+      "retryable": true,
+      "headers": {
+       "Retry-After": "$present"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "L-15",
+   "title": "A lookup does not depend on which submitter sent the record",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "LKP-001",
+    "CO-1"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-fwd",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     },
+     "label": "r1"
+    },
+    {
+     "op": "lookup",
+     "as": "c-recon",
+     "producer": "pdp-fleet-1",
+     "record": "V-01",
+     "expect": {
+      "status": 200,
+      "receipt": {
+       "receipt_id": "$same:r1.receipt_id",
+       "received_at": "$same:r1.received_at",
+       "content_digest": "$digest:V-01",
+       "record_id": "$rid:V-01",
+       "producer_id": "$producer:V-01"
+      },
+      "flags": "none",
+      "lookup": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-01",
+   "title": "Per-record outcomes in one batch",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLR-001",
+    "BLP-001",
+    "BLP-R1",
+    "BLP-003",
+    "VAL-07",
+    "ERR-SIGNATURE_INVALID",
+    "BLK-001"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-10",
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "SIGNATURE_INVALID",
+        "status": 400
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-02",
+   "title": "Mixed producers are rejected unless supported",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-002",
+    "BLK-E6",
+    "ERR-BATCH_MIXED_PRODUCERS"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-fwd",
+     "body": [
+      "V-01",
+      "V-03"
+     ],
+     "expect": {
+      "status": 400,
+      "code": "BATCH_MIXED_PRODUCERS"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-03",
+   "title": "An empty batch is rejected",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-E3",
+    "ERR-BATCH_EMPTY",
+    "BLK-001"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [],
+     "expect": {
+      "status": 400,
+      "code": "BATCH_EMPTY"
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-04",
+   "title": "More records than max_batch_records are rejected",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-001",
+    "BLK-E4",
+    "LIM-BATCHRECORDS",
+    "ERR-BATCH_TOO_MANY_RECORDS",
+    "DSM-021"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "count_array": {
+        "limit": "max_batch_records",
+        "delta": 1
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "BATCH_TOO_MANY_RECORDS"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-05",
+   "title": "A body larger than max_batch_bytes is rejected",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-E5",
+    "LIM-BATCHBYTES",
+    "ERR-REQUEST_TOO_LARGE"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "padded_array": {
+        "limit": "max_batch_bytes",
+        "delta": 1
+       }
+      }
+     },
+     "expect": {
+      "status": 413,
+      "code": "REQUEST_TOO_LARGE"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-06",
+   "title": "Resubmitting a batch returns the original receipts",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLT-M1",
+    "BLT-M2",
+    "IDP-T1",
+    "BLT-002"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-10",
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none",
+        "label": "e0"
+       },
+       {
+        "accepted": false,
+        "code": "SIGNATURE_INVALID"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none",
+        "label": "e2"
+       }
+      ]
+     },
+     "label": "b1"
+    },
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-10",
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": true,
+         "received_at": "$same:e0",
+         "receipt_id": "$same:e0",
+         "content_digest": "$digest:V-01",
+         "record_id": "$rid:V-01"
+        }
+       },
+       {
+        "accepted": false,
+        "code": "SIGNATURE_INVALID"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": true,
+         "received_at": "$same:e2",
+         "receipt_id": "$same:e2",
+         "content_digest": "$digest:V-02",
+         "record_id": "$rid:V-02"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-07",
+   "title": "Within a batch, identity decisions follow array order",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-003",
+    "IDP-T1"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-01"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none",
+        "label": "e0"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": true,
+         "received_at": "$same:e0",
+         "receipt_id": "$same:e0",
+         "content_digest": "$digest:V-01",
+         "record_id": "$rid:V-01"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-08",
+   "title": "In a batch, a conflicting element is rejected after the first is accepted",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-003",
+    "IDP-001",
+    "VAL-08"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-20"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "RECORD_ID_CONFLICT",
+        "status": 409
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-09",
+   "title": "Arrival before the predecessor is not rejected",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLO-002",
+    "CHN-R2",
+    "FLG-COVERAGE_GAP"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-02",
+      "V-01"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": {
+         "coverage_gap": true,
+         "chain_link_failure": false,
+         "equivocation": false,
+         "late": false
+        }
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-10",
+   "title": "An oversized element is rejected alone",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-001",
+    "VAL-05",
+    "ERR-RECORD_TOO_LARGE",
+    "ORD-S08"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      {
+       "gen": {
+        "oversized_record": {
+         "base": "V-01",
+         "limit": "max_record_bytes",
+         "delta": 1
+        }
+       }
+      },
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "RECORD_TOO_LARGE",
+        "status": 413
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-11",
+   "title": "A non-object element is rejected alone",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-R2",
+    "VAL-04",
+    "ERR-SCHEMA_INVALID"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      {
+       "json": 42
+      }
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "SCHEMA_INVALID",
+        "status": 400
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-12",
+   "title": "A submitter not permitted for the batch's producer gets a request-level 403",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-E7",
+    "ERR-SUBMITTER_NOT_AUTHORIZED"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pep",
+     "body": [
+      "V-01"
+     ],
+     "expect": {
+      "status": 403,
+      "code": "SUBMITTER_NOT_AUTHORIZED"
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-13",
+   "title": "A failed commit for one element does not affect the others",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-001",
+    "BLP-002",
+    "VAL-09",
+    "ERR-COLLECTOR_UNAVAILABLE"
+   ],
+   "capability": "bulk",
+   "hooks_required": [
+    "fault injection at the commit point"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "fail_commit",
+     "count": 1
+    },
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": false,
+        "code": "COLLECTOR_UNAVAILABLE",
+        "status": 503
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": {
+         "coverage_gap": true,
+         "chain_link_failure": false,
+         "equivocation": false,
+         "late": false
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-14",
+   "title": "A fully valid batch returns 200, never 202 or 207",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLR-001",
+    "BLK-E8"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-15",
+   "title": "Results follow request order",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLR-001"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-02",
+      "V-01"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": {
+         "coverage_gap": true,
+         "chain_link_failure": false,
+         "equivocation": false,
+         "late": false
+        }
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-16",
+   "title": "A duplicate member in one element rejects the whole request",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLP-R3",
+    "VAL-01",
+    "BLK-E1",
+    "ORD-S06A",
+    "JSN-002",
+    "JSN-L2"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-02",
+      "V-18"
+     ],
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-17",
+   "title": "A truncated body rejects the whole request",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "VAL-01",
+    "BLK-E1",
+    "JSN-001"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "truncate": {
+        "base": "V-01",
+        "keep": 40
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-18",
+   "title": "A body that is not an array is a batch error",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-E2",
+    "ERR-BATCH_NOT_ARRAY",
+    "VAL-02"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 400,
+      "code": "BATCH_NOT_ARRAY"
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-19",
+   "title": "Invalid UTF-8 in one element rejects the whole request",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "JSN-L1",
+    "VAL-01",
+    "BLP-R3"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      {
+       "gen": {
+        "invalid_utf8": {
+         "base": "V-02"
+        }
+       }
+      }
+     ],
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-20",
+   "title": "Excessive nesting in one element rejects the whole request",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "JSN-L4",
+    "LIM-DEPTH",
+    "VAL-01"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      {
+       "gen": {
+        "deep_nesting": {
+         "base": "V-02",
+         "depth": 40
+        }
+       }
+      }
+     ],
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-21",
+   "title": "Non-objects do not count toward producer uniformity",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLK-002",
+    "VAL-04"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-fwd",
+     "body": [
+      "V-01",
+      {
+       "json": 42
+      },
+      "V-03"
+     ],
+     "expect": {
+      "status": 400,
+      "code": "BATCH_MIXED_PRODUCERS"
+     }
+    },
+    {
+     "op": "bulk",
+     "as": "c-fwd",
+     "body": [
+      "V-01",
+      {
+       "json": 42
+      },
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "SCHEMA_INVALID"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-22",
+   "title": "Schema and signature failures in a batch are both per element",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "VAL-04",
+    "VAL-07",
+    "BLP-001"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-25",
+      "V-10",
+      "V-02"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "SCHEMA_INVALID"
+       },
+       {
+        "accepted": false,
+        "code": "SIGNATURE_INVALID"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-02",
+         "producer_id": "$producer:V-02",
+         "record_id": "$rid:V-02"
+        },
+        "flags": "none"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-23",
+   "title": "Mixed-producer batches, when supported, are authorized per element",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "DSM-011",
+    "BLK-002",
+    "VAL-06",
+    "BLP-001"
+   ],
+   "capability": "mixed_producers",
+   "fixture": {
+    "collector": {
+     "bulk_mixed_producers_supported": true
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "bulk",
+     "as": "c-fwd",
+     "body": [
+      "V-01",
+      "V-03",
+      "V-13"
+     ],
+     "expect": {
+      "status": 200,
+      "results": [
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-01",
+         "producer_id": "$producer:V-01",
+         "record_id": "$rid:V-01"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": true,
+        "receipt": {
+         "idempotent_replay": false,
+         "received_at": "$clock",
+         "receipt_id": "$nonempty",
+         "content_digest": "$digest:V-03",
+         "producer_id": "$producer:V-03",
+         "record_id": "$rid:V-03"
+        },
+        "flags": "none"
+       },
+       {
+        "accepted": false,
+        "code": "SUBMITTER_NOT_AUTHORIZED",
+        "status": 403
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-24",
+   "title": "A Collector without bulk omits the bulk endpoint from its metadata",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "OVR-001",
+    "DSM-021"
+   ],
+   "capability": "bulk_absent",
+   "fixture": {
+    "collector": {
+     "offers_bulk": false
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "absent": [
+        "trace_bulk_ingestion_endpoint",
+        "max_batch_bytes",
+        "max_batch_records"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-01",
+   "title": "Metadata contains every required member",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DSC-R1",
+    "DSM-001",
+    "DSM-002",
+    "DSM-003",
+    "DSM-004",
+    "DSM-005",
+    "DSM-007",
+    "DSM-009",
+    "DSM-013",
+    "DSM-017"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "present": [
+        "issuer",
+        "api_versions_supported",
+        "trace_ingestion_endpoint",
+        "trace_profiles",
+        "authorization_servers",
+        "ingestion_scope",
+        "max_record_bytes",
+        "idempotency_retention_seconds",
+        "producer_chain_registration_modes_supported"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-02",
+   "title": "issuer equals the Collector's identifier",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DSM-001"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "equals": {
+        "issuer": "$issuer"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-03",
+   "title": "Bulk members are present when bulk is offered",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "DSM-003",
+    "DSC-R1"
+   ],
+   "capability": "bulk",
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "present": [
+        "trace_bulk_ingestion_endpoint",
+        "max_batch_bytes",
+        "max_batch_records"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-05",
+   "title": "Only listed profiles are accepted",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DSP-001",
+    "PRF-005",
+    "ERR-UNSUPPORTED_PROFILE"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "present": [
+        "trace_profiles"
+       ]
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-15",
+     "expect": {
+      "status": 400,
+      "code": "UNSUPPORTED_PROFILE"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-06",
+   "title": "Authorization server entries state their token profile",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DSA-001",
+    "DSA-002",
+    "DSM-005",
+    "DSA-005"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "authorization_server_entries": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-07",
+   "title": "Metadata discloses no tenant, client, producer, or key",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "PRV-005",
+    "DSC-001"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "absent_strings": [
+        "c-pdp",
+        "c-recon",
+        "pdp-fleet-1",
+        "key-2026-01",
+        "payments-gateway-pep",
+        "D1",
+        "D2"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-08",
+   "title": "The registration modes match the behavior for an unregistered chain",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ADM-001",
+    "DSM-013",
+    "ADM-M1",
+    "ADM-M2",
+    "ADM-M3"
+   ],
+   "variants": [
+    "M1",
+    "M2",
+    "M3"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "present": [
+        "producer_chain_registration_modes_supported"
+       ]
+      }
+     }
+    }
+   ],
+   "note": "Run with the G-* tests for the variant that the metadata describes."
+  },
+  {
+   "id": "D-09",
+   "title": "Each profile entry carries its cryptographic capabilities",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DSP-001",
+    "DSP-002",
+    "DSP-003",
+    "DSP-004",
+    "DSM-004",
+    "DSP-006"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "profile_entries": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-10",
+   "title": "Two profiles may list different suites",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "DSP-009"
+   ],
+   "capability": "multiple_profiles",
+   "hooks_required": [
+    "second profile"
+   ],
+   "kind": "manual",
+   "procedure": "Configure a second profile with a different suite. Submit one valid record for each.",
+   "expected": "Each record is verified only with its own profile's entry. Neither profile's algorithms are used for the other."
+  },
+  {
+   "id": "D-11",
+   "title": "synchronous_integrity_flags matches the receipts",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ASY-004",
+    "ASY-005",
+    "ASY-002",
+    "DSM-014",
+    "RCP-007"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "equals": {
+        "synchronous_integrity_flags": true
+       }
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-12",
+   "title": "Retention and replay-only profile lists are consistent",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RET-002",
+    "RET-006",
+    "DSM-017",
+    "DSM-018"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "min": {
+        "idempotency_retention_seconds": 86400
+       },
+       "disjoint": [
+        "trace_profiles_replay_only",
+        "trace_profiles"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-13",
+   "title": "synchronous_integrity_flags false: no receipt carries a flag",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ASY-002",
+    "DSM-014"
+   ],
+   "capability": "async_flags",
+   "fixture": {
+    "collector": {
+     "synchronous_integrity_flags": false
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "equals": {
+        "synchronous_integrity_flags": false
+       }
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 200
+     }
+    }
+   ]
+  },
+  {
+   "id": "D-14",
+   "title": "The record size limit in the metadata is the limit enforced",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DSM-009",
+    "DSM-021",
+    "LIM-RECORD",
+    "DSM-022"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "equals": {
+        "max_record_bytes": 262144
+       }
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "oversized_record": {
+        "base": "V-01",
+        "limit": "max_record_bytes",
+        "delta": 1
+       }
+      }
+     },
+     "expect": {
+      "status": 413,
+      "code": "RECORD_TOO_LARGE"
+     }
+    }
+   ]
+  },
+  {
+   "id": "P-01",
+   "title": "Signatures follow the producer's profile",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "SIG-001",
+    "PRF-001"
+   ],
+   "kind": "behavior",
+   "procedure": "Verify a producer's output with the public key, using the producer's profile.",
+   "expected": "The signature verifies as the profile defines; kid is inside the signed scope; the encoding is the profile's."
+  },
+  {
+   "id": "P-02",
+   "title": "record_id forms and uniqueness",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RID-001",
+    "RID-003"
+   ],
+   "kind": "behavior",
+   "procedure": "Generate 10,000 records.",
+   "expected": "Every record_id is a lowercase UUID or an uppercase ULID, and is unique for the producer."
+  },
+  {
+   "id": "P-03",
+   "title": "The producer checks the receipt digest",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "SHOULD",
+   "requirements": [
+    "RCP-003",
+    "DIG-R2"
+   ],
+   "kind": "behavior",
+   "procedure": "Compare the producer's own content_digest with the receipt's.",
+   "expected": "Equal, or the producer reports a mismatch."
+  },
+  {
+   "id": "P-04",
+   "title": "Retry after a retryable failure",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RTY-003",
+    "SUB-001",
+    "BLT-002"
+   ],
+   "kind": "behavior",
+   "procedure": "A stub returns 503 twice, then 201.",
+   "expected": "The producer resubmits identical bytes with increasing delays and records success only after the 201."
+  },
+  {
+   "id": "P-05",
+   "title": "Retry-After is honored",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RTY-004"
+   ],
+   "kind": "behavior",
+   "procedure": "A stub returns 429 with Retry-After: 2.",
+   "expected": "The producer waits at least 2 seconds."
+  },
+  {
+   "id": "P-06",
+   "title": "A terminal rejection is not retried",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RTY-001",
+    "BLT-M2"
+   ],
+   "kind": "behavior",
+   "procedure": "A stub returns a terminal 400.",
+   "expected": "The producer does not resubmit unchanged and surfaces the code."
+  },
+  {
+   "id": "P-07",
+   "title": "A dropped connection is retried with the same bytes",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RTY-003",
+    "BLT-002"
+   ],
+   "kind": "behavior",
+   "procedure": "A stub drops the connection after reading the request.",
+   "expected": "The producer resubmits the same bytes."
+  },
+  {
+   "id": "P-08",
+   "title": "Unacknowledged records survive a restart",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "SHOULD",
+   "requirements": [
+    "RTY-006"
+   ],
+   "kind": "behavior",
+   "procedure": "Restart the producer with unacknowledged records.",
+   "expected": "The records are resubmitted from durable storage, or the producer's documentation states that it does not buffer durably."
+  },
+  {
+   "id": "P-09",
+   "title": "Advertised limits are respected",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "LIM-003",
+    "BLK-002",
+    "WIR-003"
+   ],
+   "kind": "behavior",
+   "procedure": "Metadata states small limits and no mixed producers.",
+   "expected": "The producer's requests respect them."
+  },
+  {
+   "id": "P-10",
+   "title": "A corrected record is a new record",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RTY-007"
+   ],
+   "kind": "behavior",
+   "procedure": "Fix a rejected record.",
+   "expected": "The corrected record has a new record_id. Changed content is never resubmitted under the old one."
+  },
+  {
+   "id": "P-11",
+   "title": "No credentials in records",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "PRV-001"
+   ],
+   "kind": "behavior",
+   "procedure": "Inspect produced records.",
+   "expected": "No raw bearer tokens or credentials."
+  },
+  {
+   "id": "P-12",
+   "title": "No invented correlation values",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "COR-001"
+   ],
+   "kind": "behavior",
+   "procedure": "The producer has no correlation pair for an event while the Collector requires it.",
+   "expected": "The producer does not submit, or reports the condition. It does not invent values."
+  },
+  {
+   "id": "P-13",
+   "title": "Reconciliation outcomes are interpreted correctly",
+   "class": "producer",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "RCN-T1",
+    "RCN-T2",
+    "RCN-T3",
+    "RCN-T4",
+    "RCN-T5",
+    "RCN-T6",
+    "LKP-D1",
+    "LKP-006",
+    "RCN-001"
+   ],
+   "capability": "receipt_lookup",
+   "kind": "behavior",
+   "procedure": "A stub receipt endpoint returns: 200 with the producer's digest; 200 with a different digest; 404 within the retention period; 404 after it; 403.",
+   "expected": "The producer marks the first accepted and stops retrying; alerts on the second and does not mark it accepted; keeps the record and retries the lookup for the third; infers nothing for the fourth; treats the fifth as an access problem."
+  },
+  {
+   "id": "P-14",
+   "title": "Content encodings and clients follow the Collector's metadata",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "SCO-004",
+    "DSC-005",
+    "DSC-004",
+    "RCP-012",
+    "RCP-010"
+   ],
+   "kind": "behavior",
+   "procedure": "Metadata names a scope, adds an unknown member, and sets a cache lifetime.",
+   "expected": "The producer reads the scope from metadata, ignores unknown members, and re-reads after the cache lifetime."
+  },
+  {
+   "id": "P-15",
+   "title": "Producer treats flags correctly",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ASY-003"
+   ],
+   "kind": "behavior",
+   "procedure": "Receive a receipt without the four flags.",
+   "expected": "The producer does not treat the absence as no finding."
+  },
+  {
+   "id": "F-01",
+   "title": "Signed content is preserved",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-3",
+    "FW-4"
+   ],
+   "kind": "behavior",
+   "procedure": "Pass V-01, V-03, V-04, V-06 through the forwarder.",
+   "expected": "The canonical form, and therefore the content_digest, of each delivered record equals the source's. V-04 is not altered by re-encoding."
+  },
+  {
+   "id": "F-02",
+   "title": "Nothing is repaired",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-3",
+    "FW-7"
+   ],
+   "kind": "behavior",
+   "procedure": "Pass V-10 through the forwarder.",
+   "expected": "It is delivered unchanged or surfaced, never repaired. The Collector returns SIGNATURE_INVALID."
+  },
+  {
+   "id": "F-03",
+   "title": "One credential and queue per evidence domain",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-2",
+    "FW-1"
+   ],
+   "kind": "behavior",
+   "procedure": "Feed records for D1 and D2 through a forwarder with a credential per domain.",
+   "expected": "Each request uses the matching credential. No request mixes domains."
+  },
+  {
+   "id": "F-04",
+   "title": "Custody is not acceptance",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-8",
+    "FW-9"
+   ],
+   "kind": "behavior",
+   "procedure": "The Collector stub delays its response.",
+   "expected": "Before the receipt the forwarder reports at most custody upstream. After it, acceptance."
+  },
+  {
+   "id": "F-05",
+   "title": "At-least-once delivery over restarts",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-10",
+    "FW-11"
+   ],
+   "kind": "behavior",
+   "procedure": "Kill the forwarder after it acknowledged custody, restart; the Collector stub fails twice before accepting.",
+   "expected": "Every record is delivered, and the Collector shows one receipt per record."
+  },
+  {
+   "id": "F-06",
+   "title": "Terminal rejections are surfaced",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-12",
+    "BLT-M2",
+    "KEY-013"
+   ],
+   "kind": "behavior",
+   "procedure": "The Collector returns a terminal 400 for one record.",
+   "expected": "Not retried. Surfaced with code and record_id. A KEY_NOT_VALID rejection is kept for resubmission."
+  },
+  {
+   "id": "F-07",
+   "title": "Backoff and Retry-After",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-14",
+    "RTY-004",
+    "BLT-M3"
+   ],
+   "kind": "behavior",
+   "procedure": "The Collector returns 429 with Retry-After and 503.",
+   "expected": "Backoff and Retry-After honored."
+  },
+  {
+   "id": "F-08",
+   "title": "Transport metadata is not evidence",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-5"
+   ],
+   "kind": "behavior",
+   "procedure": "Set conflicting producer identity and domain in transport metadata.",
+   "expected": "No effect on the submitted record, the credential used, or the Collector's decisions."
+  },
+  {
+   "id": "F-09",
+   "title": "Metadata limits and own credential",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-15",
+    "FW-1"
+   ],
+   "kind": "behavior",
+   "procedure": "Metadata states limits and no mixed producers.",
+   "expected": "Batches respect them. The forwarder authenticates with its own credential."
+  },
+  {
+   "id": "F-10",
+   "title": "Consumption position advances only after a disposition",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-13"
+   ],
+   "kind": "behavior",
+   "procedure": "A broker-backed forwarder; the Collector is unavailable.",
+   "expected": "The consumer position does not advance. After recovery, delivery completes."
+  },
+  {
+   "id": "F-11",
+   "title": "No tokens or content in logs",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-17"
+   ],
+   "kind": "behavior",
+   "procedure": "Inspect forwarder logs.",
+   "expected": "No tokens, no record content."
+  },
+  {
+   "id": "F-12",
+   "title": "Receipts are retained for reconciliation",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "SHOULD",
+   "requirements": [
+    "FW-19"
+   ],
+   "kind": "behavior",
+   "procedure": "Pass records through and ask the forwarder what it holds per record.",
+   "expected": "For each record: producer_id, record_id, content_digest, receipt_id, received_at."
+  },
+  {
+   "id": "F-13",
+   "title": "Only permitted producers are forwarded",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-6"
+   ],
+   "kind": "behavior",
+   "procedure": "Offer the forwarder a record from a producer it is not permitted to forward for.",
+   "expected": "The forwarder does not submit it."
+  },
+  {
+   "id": "F-14",
+   "title": "No ordering dependence",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-16"
+   ],
+   "kind": "behavior",
+   "procedure": "Deliver a producer's chain to the forwarder in reverse order.",
+   "expected": "Delivery completes, in any order."
+  },
+  {
+   "id": "F-15",
+   "title": "Holding time stays below the replay retention",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "SHOULD",
+   "requirements": [
+    "FW-18",
+    "BRK-002",
+    "BRK-003"
+   ],
+   "kind": "behavior",
+   "procedure": "Hold records near idempotency_retention_seconds.",
+   "expected": "The forwarder alerts, and does not treat a later resubmission as a replay."
+  },
+  {
+   "id": "F-16",
+   "title": "Pre-verification is optional and not authoritative",
+   "class": "forwarder",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "FW-7"
+   ],
+   "kind": "behavior",
+   "procedure": "Enable pre-verification and feed it a record with a bad signature.",
+   "expected": "It raises an alarm or discards visibly. It does not repair the record."
+  },
+  {
+   "id": "C-51",
+   "title": "A Collector that advertises gzip accepts a gzip-encoded body",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "WIR-002",
+    "DSM-020"
+   ],
+   "capability": "gzip",
+   "fixture": {
+    "collector": {
+     "content_encodings_supported": [
+      "gzip"
+     ]
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "equals": {
+        "content_encodings_supported": [
+         "gzip"
+        ]
+       }
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "content_encoding": "gzip",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    }
+   ],
+   "note": "A real harness gzips the body. The model does not decode it."
+  },
+  {
+   "id": "C-52",
+   "title": "The decoded size limit is enforced while decoding",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "WIR-004"
+   ],
+   "capability": "gzip",
+   "kind": "manual",
+   "procedure": "Send a gzip body that decodes to more than max_record_bytes (a decompression bomb).",
+   "expected": "The Collector stops decoding at the limit and returns 413 without allocating the decoded size."
+  },
+  {
+   "id": "C-53",
+   "title": "A key or algorithm named in the request is never used",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "PRM-004",
+    "SIG-006"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "variant": {
+        "base": "V-01",
+        "set": {
+         "kid": "key-inline",
+         "trace.x_public_key_jwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AAAA"
+         }
+        },
+        "sign_with": "pdp-fleet-1/key-2026-01"
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "KEY_UNKNOWN"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-54",
+   "title": "An array that exceeds the profile limit is a schema failure, never truncated",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "LIM-001",
+    "ERR-SCHEMA_INVALID"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "variant": {
+        "base": "V-01",
+        "set": {
+         "trace.event.tokens": [
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j0"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j1"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j2"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j3"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j4"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j5"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j6"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j7"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j8"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j9"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j10"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j11"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j12"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j13"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j14"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j15"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j16"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j17"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j18"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j19"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j20"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j21"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j22"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j23"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j24"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j25"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j26"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j27"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j28"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j29"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j30"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j31"
+          },
+          {
+           "issuer": "https://a.example",
+           "token_type": "access_token",
+           "jti": "j32"
+          }
+         ]
+        },
+        "sign_with": "pdp-fleet-1/key-2026-01"
+       }
+      }
+     },
+     "expect": {
+      "status": 400,
+      "code": "SCHEMA_INVALID"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-55",
+   "title": "Records without correlation context are accepted and marked when the Collector allows it",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "COR-002",
+    "RCP-008"
+   ],
+   "capability": "unattributed",
+   "fixture": {
+    "collector": {
+     "execution_correlation_required": false
+    }
+   },
+   "kind": "api",
+   "steps": [
+    {
+     "op": "metadata",
+     "expect": {
+      "status": 200,
+      "metadata": {
+       "equals": {
+        "execution_correlation_required": false
+       }
+      }
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-14",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-14",
+       "producer_id": "$producer:V-14",
+       "record_id": "$rid:V-14",
+       "unattributed_flag": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-56",
+   "title": "A record received long after signed_at is accepted and flagged late",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "FLG-LATE",
+    "RCP-007",
+    "SEC-001"
+   ],
+   "capability": "sync_flags",
+   "hooks_required": [
+    "Collector clock"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_clock",
+     "value": "2026-06-13T00:00:00.000Z"
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": {
+       "coverage_gap": false,
+       "chain_link_failure": false,
+       "equivocation": false,
+       "late": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-57",
+   "title": "The same record_id from another producer is a different identity",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "IDP-T4",
+    "RID-004",
+    "RID-R1"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "variant": {
+        "base": "V-01",
+        "set": {
+         "producer": "pdp/fleet 1",
+         "kid": "key-sl-01",
+         "producer_chain.producer_id": "pdp/fleet 1",
+         "producer_chain.producer_chain_id": "chain-sl-02"
+        },
+        "sign_with": "pdp/fleet 1/key-sl-01"
+       }
+      }
+     },
+     "expect": {
+      "status": 201
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-58",
+   "title": "Rate limiting returns 429 with Retry-After",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-RATE_LIMITED",
+    "SUB-S6"
+   ],
+   "capability": "rate_limiting",
+   "hooks_required": [
+    "rate limit"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_rate_limit",
+     "max_requests": 1
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-02",
+     "expect": {
+      "status": 429,
+      "code": "RATE_LIMITED",
+      "retryable": true,
+      "headers": {
+       "Retry-After": "$present"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-59",
+   "title": "An integrity hold refuses submissions with 503",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-COLLECTOR_INTEGRITY_HOLD"
+   ],
+   "capability": "integrity_hold",
+   "hooks_required": [
+    "integrity hold"
+   ],
+   "kind": "manual",
+   "procedure": "Put the Collector in its integrity-hold state and submit V-01.",
+   "expected": "503 COLLECTOR_INTEGRITY_HOLD, retryable true, Retry-After present, nothing accepted."
+  },
+  {
+   "id": "C-60",
+   "title": "An unexpected failure returns 500 and accepts nothing",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "ERR-INTERNAL_ERROR"
+   ],
+   "hooks_required": [
+    "fault injection"
+   ],
+   "kind": "manual",
+   "procedure": "Cause an unexpected internal failure while processing V-01.",
+   "expected": "500 INTERNAL_ERROR, retryable true, no receipt, record, or index entry. A retry of the same bytes is a first acceptance."
+  },
+  {
+   "id": "C-61",
+   "title": "Trailing content after the JSON value rejects the request",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "JSN-L3",
+    "VAL-01"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "raw": "{} x"
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    }
+   ]
+  },
+  {
+   "id": "C-62",
+   "title": "A producer-supplied content_digest member has no effect",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "DIG-R1",
+    "DIG-R3"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "gen": {
+       "variant": {
+        "base": "V-01",
+        "set": {
+         "content_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "sign_with": "pdp-fleet-1/key-2026-01"
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "content_digest": "$not:sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "R-16",
+   "title": "Request-form rules apply to a replay",
+   "class": "collector",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "RPR-T2",
+    "RPR-T1"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "expect": {
+      "status": 201,
+      "receipt": {
+       "idempotent_replay": false,
+       "received_at": "$clock",
+       "receipt_id": "$nonempty",
+       "content_digest": "$digest:V-01",
+       "producer_id": "$producer:V-01",
+       "record_id": "$rid:V-01"
+      },
+      "flags": "none"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": "V-01",
+     "content_type": "text/plain",
+     "expect": {
+      "status": 415,
+      "code": "UNSUPPORTED_MEDIA_TYPE"
+     }
+    },
+    {
+     "op": "submit",
+     "as": "c-pdp",
+     "body": {
+      "raw": "{"
+     },
+     "expect": {
+      "status": 400,
+      "code": "MALFORMED_JSON"
+     }
+    }
+   ]
+  },
+  {
+   "id": "B-25",
+   "title": "A Collector that cannot process a batch at all responds at request level",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "BLR-002",
+    "BLR-003"
+   ],
+   "capability": "bulk",
+   "hooks_required": [
+    "fault injection (storage down)"
+   ],
+   "kind": "api",
+   "steps": [
+    {
+     "op": "hook",
+     "action": "set_collector",
+     "name": "storage_down",
+     "value": true
+    },
+    {
+     "op": "bulk",
+     "as": "c-pdp",
+     "body": [
+      "V-01",
+      "V-02"
+     ],
+     "expect": {
+      "status": 503,
+      "code": "COLLECTOR_UNAVAILABLE",
+      "retryable": true,
+      "headers": {
+       "Retry-After": "$present"
+      }
+     }
+    },
+    {
+     "op": "inspect",
+     "what": "count",
+     "domain": "D1",
+     "expect": {
+      "count": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "A-18",
+   "title": "An introspection result is not cached beyond the token's lifetime",
+   "class": "collector",
+   "applicability": "conditional",
+   "strength": "MUST",
+   "requirements": [
+    "TOK-006"
+   ],
+   "capability": "introspection",
+   "hooks_required": [
+    "introspection stub"
+   ],
+   "kind": "manual",
+   "procedure": "Return active:true with a short exp, then active:false for the same token after exp, and resubmit.",
+   "expected": "The second submission is rejected with 401. The first result was not reused after exp."
+  },
+  {
+   "id": "P-16",
+   "title": "Clients validate the Collector's certificate",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "TRN-005"
+   ],
+   "kind": "behavior",
+   "procedure": "Present a certificate for another host name, then one from an untrusted chain.",
+   "expected": "The client refuses both and sends no token."
+  },
+  {
+   "id": "P-17",
+   "title": "Deduplication beyond the retention period is not assumed",
+   "class": "producer",
+   "applicability": "mandatory",
+   "strength": "MUST",
+   "requirements": [
+    "EXP-002",
+    "BRK-002"
+   ],
+   "kind": "behavior",
+   "procedure": "Hold a record for longer than idempotency_retention_seconds, then resubmit.",
+   "expected": "The producer does not treat the resubmission as a replay and does not depend on the Collector for deduplication."
+  }
+ ]
+}

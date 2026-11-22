@@ -56,6 +56,9 @@ trace-mvp-post-mvp.md              Post-MVP backlog from the implementation
 cedarling-trace-design*.md         Cedarling producer (full + MVP)
 auth-server-trace-design*.md       Auth Server producer (full + MVP)
 fido-trace-design*.md              FIDO Server producer (full + MVP)
+govops-trace-collector-api.md      GovOps TRACE Collector API standard (vendor-neutral)
+govops-trace-collector-lock-mapping.md   Lock Server mapping and required changes for that standard
+conformance/                       Machine-readable conformance artifacts for the standard
 ```
 
-The `research/` directory holds background source material (the TRACE spec, Jans component docs, and code references) used while writing these designs; it is not part of the design deliverable.
+The `research/` directory holds background source material (the TRACE spec, Jans component docs, and code references) used while writing these designs; it is not part of the design deliverable. The `conformance/` directory holds JSON artifacts (requirements, vectors, fixtures, tests) and a small reference model that checks them for consistency. The model is not a Collector implementation.
