@@ -35,7 +35,7 @@ The GovOps TRACE Collector API (`govops-trace-collector-api.md`) refers to this 
 | `trace` | **[STRUCT]** | Object wrapping the TRACE claim (fields in §2–§4). The base v0.2 top-level claim fields move inside it. |
 | `producer_chain` | **[ADD]** | Per-producer hash chain (§5). |
 | `parent_record_ids` | **[ADD]** | Typed causal edges to other records (§6). |
-| `signature` | **[CONSTRAIN]** | As v0.2 (base64url Ed25519/ES256/ES384 over RFC 8785 JCS of all fields except `signature`), but the GovOps MVP fixes **Ed25519 only** (a deliberate subset of the v0.2 set). The signature covers the whole envelope, not just `trace`. The complete suite (algorithm, signature input, encoding, canonicalization, content digest, genesis sentinel) is in §15. |
+| `signature` | **[CONSTRAIN]** | As v0.2 (base64url signature over RFC 8785 JCS of all fields except `signature`), but this profile fixes **Ed25519 only** (a deliberate subset of the v0.2 algorithm set). The signature covers the whole envelope, not just `trace`. The complete suite (algorithm, signature input, encoding, canonicalization, content digest, genesis sentinel) is in §15. |
 
 **[CONSTRAIN] `cnf` is not carried in the body.** v0.2 carries the signing key in `cnf.jwk`. GovOps resolves the key by `kid` from the administratively-provisioned Producer Key Registry and **omits `cnf`** — the in-record key is never trusted to establish its own authority. (This is a profile divergence from base v0.2.)
 
@@ -50,7 +50,7 @@ Inside `trace`, relative to the base v0.2 claim:
 | `eat_profile` | **[CONSTRAIN]** | Fixed to `tag:govops.owasp.org,2026:trace-v1`. |
 | `event_kind` | **[ADD]** | **The schema discriminator.** Required; selects which `event` sub-schema applies (§7). This is the single largest addition — v0.2 has no event-kind concept. |
 | `signed_at` | **[CONSTRAIN]** | NumericDate; the base v0.2 `iat`, renamed and explicitly "producer time, not receipt time." A claim only: a collector uses its own clock, never `signed_at`, to decide whether a key was valid, and never to order receipts. |
-| `trace_execution_id` | **[ADD]** | Identifies one specific governed execution within the namespace named by `execution_authority`. Required for the MVP catalog kinds. |
+| `trace_execution_id` | **[ADD]** | Identifies one specific governed execution within the namespace named by `execution_authority`. A producer of the MVP catalog kinds supplies it. A Collector that publishes `execution_correlation_required: false` may accept a record without the pair and report it as unattributed (Collector API §7.5); one that publishes `true` rejects it. |
 | `execution_authority` | **[ADD]** | Identifies the namespace in which an execution ID is allocated. Travels with `trace_execution_id`; the two together are the **execution correlation pair**, allocated by the component that initiates the governed execution before the first authorization evaluation and reused by every component that continues it. A record with only one of the two is incomplete. Distinct from `subject.workload_id`. |
 | `execution_epoch_id` / `previous_epoch_id` | **[ADD]** | Epoch rollover within one execution (same `trace_execution_id`). |
 | `parent_execution_id` | **[ADD]** | Links a child execution to its parent (delegation/fan-out). |
@@ -369,7 +369,7 @@ The Collector API does not define any cryptographic algorithm. It requires the p
 | Content digest | `sha256:` followed by the lowercase hexadecimal SHA-256 of the JCS form of the **complete** record, including `signature`. There is no other textual form. It is computed by the collector and is never a record member. |
 | Genesis sentinel | `sha256:` followed by 64 zeros. It is the `prev_record_hash` of the record at `sequence_number` 1. |
 | Identifier forms | `record_id`: lowercase UUID or uppercase ULID (§1). |
-| Array limits | `tokens[]` 32; `token_claims[]` 32; `decisions[]` and `invocations[]` 128; `operation_ids[]` 64; `parent_record_ids[]` 64. A record that exceeds a limit is invalid and is never truncated. A record is expected to stay within 262,144 bytes. |
+| Array limits | `tokens[]` 32; `token_claims[]` 32; `decisions[]` and `invocations[]` 128; `operation_ids[]` 64; `parent_record_ids[]` 64. A record that exceeds a limit is invalid and is never truncated. A record is expected to stay within 262,144 bytes, but a Collector may publish a lower `max_record_bytes` (the Collector API minimum is 65,536), so a producer reads the published value and does not assume this one. |
 
 **Versioning.** A change to the signature algorithm, signature input, signature encoding, canonicalization, content digest, genesis sentinel, or identifier forms is a new profile identifier. A profile identifier therefore fixes how a record is canonicalized and digested for as long as the identifier exists. A collector that stops accepting new records under an identifier can still answer a resubmission of an earlier record, because it can still digest it. A new profile, for example one that requires hardware-backed ECDSA signatures, needs no new version of the Collector API.
 
@@ -387,13 +387,12 @@ The Collector API does not define any cryptographic algorithm. It requires the p
 | 8 | MVP `event` payloads: singular `decision`/`invocation` (`{action, resource_type, outcome}`) by default, `decisions[]`/`invocations[]` with per-entry `decision_id` only for atomic batches | ADD | yes |
 | 9 | Full token context (`validation_at_decision`, `token_claims[]`, credential metadata) | ADD | later |
 | 10 | Lifecycle/identity/approval/signal event kinds (21 more) | ADD | later |
-| 11 | Capability resolution (policy-store mapping; `capability_id` collector-derived, resolution MVP-required) | ADD / COLLECTOR-DERIVED | yes |
+| 11 | Capability resolution (policy-store mapping; `capability_id` collector-derived; resolution attempted for every MVP decision/invocation record) | ADD / COLLECTOR-DERIVED | **yes** |
 | 12 | Producer Key Registry entry + Producer-Key Authorization Statement schemas | ADD (out-of-band) | yes |
 | 13 | Receipt-commitment profile (collector-internal; not required by the Collector API) | ADD (collector-side) | yes |
-| 14 | Capability resolution (every MVP decision/invocation record) | COLLECTOR-DERIVED | **yes** |
-| 15 | Analytics enrichment: token (`claims_at_decision` vs `current_token_state`), `session_correlation`, `actor_context`, versioned org/resource/capability reference data, four region dimensions, attribution quality, per-invocation projection | COLLECTOR-DERIVED | yes (full depth phased) |
-| 16 | GovOps metrics with explicit per-family denominators (authorization / invocation / observed-effect) | COLLECTOR-DERIVED | yes |
-| 17 | Cryptographic suite, genesis sentinel, identifier forms, and array limits stated by the profile (§15) | CONSTRAIN | yes |
+| 14 | Analytics enrichment: token (`claims_at_decision` vs `current_token_state`), `session_correlation`, `actor_context`, versioned org/resource/capability reference data, four region dimensions, attribution quality, per-invocation projection | COLLECTOR-DERIVED | yes (full depth phased) |
+| 15 | GovOps metrics with explicit per-family denominators (authorization / invocation / observed-effect) | COLLECTOR-DERIVED | yes |
+| 16 | Cryptographic suite, genesis sentinel, identifier forms, and array limits stated by the profile (§15) | CONSTRAIN | yes |
 
 ## References
 
@@ -505,8 +504,11 @@ Everything the collector computes lives in the Stored Record Envelope's `verific
     "trust_tier": "attested"
   },
   "ingestion": {
+    "receipt_id": "108422",
     "receipt_sequence": 108422,
     "received_at": "2026-06-11T00:41:02.123Z",
+    "content_digest": "sha256:...",
+    "chain_admission": "first_observed_genesis",
     "prev_receipt_hash": "sha256:...",
     "coverage_gap_flag": false,
     "chain_link_failure_flag": false,
