@@ -303,14 +303,15 @@ The body is exactly one record. No wrapper object is used.
 
 | Status | When | Body |
 |---|---|---|
-| `202 Accepted` | The record was verified and durably accepted, or an identical record had already been accepted (replay) | Acceptance receipt |
+| `201 Created` | First durable acceptance: the record was verified and durably accepted by this request | Acceptance receipt, `idempotent_replay` false |
+| `200 OK` | Idempotent replay: an identical record had already been accepted | The original acceptance receipt, `idempotent_replay` true |
 | `400` | Malformed JSON, invalid record, unverifiable signature or key | Problem Details |
 | `401`, `403` | Authentication or authorization failure | Problem Details |
 | `409` | The record identity is bound to different content | Problem Details |
 | `413`, `415`, `429` | Limit, media type, rate | Problem Details |
 | `500`, `503` | Nothing was accepted; retry is safe | Problem Details |
 
-A `202` from this API means durable acceptance (§7.2), not merely "queued for processing".
+`201` and `200` are used, and `202 Accepted` is not, because `202` conventionally means that processing has not completed. This API acknowledges only after verification and durable storage (§7.2). A `201` means the record was durably accepted by this request. A `200` means an earlier request already accepted it. A client MUST treat both as acceptance and MUST use `idempotent_replay`, not the status, to tell them apart. A `201` response MAY include a `Location` header if the Collector offers a retrieval URL for the record; clients MUST NOT depend on it.
 
 ### 6.3 Acceptance receipt
 
@@ -353,7 +354,7 @@ A Collector MAY add members. A client MUST ignore members it does not recognize.
 | Stage | What it establishes | When | Where reported |
 |---|---|---|---|
 | **Cryptographic verification** | The producer key was registered, valid, and authorized for the event kind, and the Ed25519 signature is valid over the JCS bytes. | Before acceptance (steps 11 and 12). | A failure is an error response. Success is implied by a receipt. |
-| **Acceptance** | The Collector durably holds the assertion and a receipt for it, bound to the evidence domain, and will return the same receipt for any identical resubmission. | At the `202` (or an accepted bulk element). | The acceptance receipt. |
+| **Acceptance** | The Collector durably holds the assertion and a receipt for it, bound to the evidence domain, and will return the same receipt for any identical resubmission. | At the `201` or `200` (or an accepted bulk element). | The acceptance receipt. |
 | **Evidence assessment** | Derived findings such as settlement, completeness, trust tier, capability resolution, lineage coverage. | Later, asynchronously, any number of times. | Outside this API. |
 
 Rules that follow:
@@ -365,7 +366,7 @@ Rules that follow:
 
 ### 7.2 When a Collector may acknowledge
 
-A Collector MUST NOT return a receipt (a `202`, or an accepted element in a `207`) until **all** of the following hold:
+A Collector MUST NOT return a receipt (a `201` or `200` from the single-record endpoint, or an accepted element in a bulk response) until **all** of the following hold:
 
 1. Steps 2 to 14 of §4.6 succeeded for the record.
 2. The assertion (as defined in §5.7) and its receipt data (`receipt_id`, `received_at`, `content_digest`, and the integrity flags) have been written to durable storage. Durable means the write survives a process crash and a restart of the Collector, and, if the Collector advertises `acceptance_durability: "replicated_durable"`, the loss of a single storage node.
@@ -446,7 +447,7 @@ When mixed producers are supported, `SUBMITTER_NOT_AUTHORIZED` is reported per e
 
 ### 8.3 Response
 
-When the envelope was valid and the Collector processed the batch, the status is `207 Multi-Status`, even if every element was rejected. The body is:
+When the envelope was valid and the Collector processed the batch, the status is `200 OK`, even if every element was rejected. `207 Multi-Status` is not used. The body is:
 
 ```json
 {
@@ -473,7 +474,7 @@ When the envelope was valid and the Collector processed the batch, the status is
 
 ### 8.5 Retry
 
-After a `207`, a producer or forwarder MUST:
+After a `200` bulk response, a producer or forwarder MUST:
 
 1. treat each element with `accepted: true` as complete, including elements with `idempotent_replay: true`;
 2. treat each element whose error has `retryable: false` as a terminal rejection: not retry it unchanged, and surface it to an operator;
@@ -489,7 +490,7 @@ Idempotency is keyed on record identity and `content_digest`, not on the receive
 
 | Condition | Required behavior |
 |---|---|
-| Same record identity, same `content_digest` as an accepted record | Return the **original acceptance receipt** with `idempotent_replay: true` and status `202`. Do not create a second receipt, a second chain entry, or new flags. |
+| Same record identity, same `content_digest` as an accepted record | Return the **original acceptance receipt** with `idempotent_replay: true` and status `200` (the first acceptance returned `201`). Do not create a second receipt, a second chain entry, or new flags. |
 | Same record identity, different `content_digest`, record verifies | Return `409` with `RECORD_ID_CONFLICT`. The first-accepted record is authoritative and MUST NOT be overwritten, amended, or replaced. |
 | Same chain position, different `record_id`, both verify | Not a conflict. Accept the new record with `equivocation_flag: true` (§7.4). |
 | Same `record_id`, different `producer_id` | Different identity. Accept normally. |
@@ -512,7 +513,7 @@ Detail:
 
 ### 10.1 Problem Details
 
-Every error response from an ingestion endpoint, and every per-element `error` in a `207`, is an RFC 9457 Problem Details object. Request-level errors use `Content-Type: application/problem+json`.
+Every error response from an ingestion endpoint, and every per-element `error` in a bulk response, is an RFC 9457 Problem Details object. Request-level errors use `Content-Type: application/problem+json`.
 
 | Member | Required | Content |
 |---|---|---|
@@ -678,7 +679,7 @@ A forwarder is conforming only if it satisfies all of the following.
 
 **Durable acknowledgement**
 
-- **FW-8** Only a Collector receipt (a `202`, or an element with `accepted: true`) means a record was accepted. A forwarder MUST NOT report to its upstream that a record was accepted by the Collector until it holds that receipt for that record.
+- **FW-8** Only a Collector receipt (a `201` or `200` from the single-record endpoint, or an element with `accepted: true`) means a record was accepted. A forwarder MUST NOT report to its upstream that a record was accepted by the Collector until it holds that receipt for that record.
 - **FW-9** A forwarder MAY durably queue a record and acknowledge custody to its upstream before the Collector responds, but the acknowledgement MUST be distinguishable from Collector acceptance (for example, by status name or protocol semantics). The upstream MUST NOT be led to believe the evidence is held by the Collector. For example, an OTLP `Export` success means only that the OpenTelemetry Collector received the data.
 - **FW-10** A forwarder that acknowledges custody MUST persist the record durably before doing so, and MUST retain it, across restarts, until the Collector returns an acceptance or a terminal rejection for it.
 - **FW-11** A forwarder MUST provide at-least-once delivery and rely on Collector idempotency (§9) to absorb duplicates. It MUST NOT drop a record because of a `retryable: true` error, a timeout, or a connection failure.
@@ -805,9 +806,9 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 
 | ID | Requirements | Procedure | Expected |
 |---|---|---|---|
-| C-01 | §6, §7.2 | `c-pdp` submits V-01. | `202`; receipt with every REQUIRED member; `idempotent_replay` false; all four flags false; `content_digest` equals the value in Appendix C.3. |
-| C-02 | §9 | Submit V-01, then V-01 again. | Both `202`. The second has the same `receipt_id`, `received_at`, `content_digest`; `idempotent_replay` true. No second receipt exists **(hook)**. |
-| C-03 | §5.7, §9 | Submit V-01, then V-06 (V-01 re-serialized). | `202` replay with the original receipt. |
+| C-01 | §6, §7.2 | `c-pdp` submits V-01. | `201`; receipt with every REQUIRED member; `idempotent_replay` false; all four flags false; `content_digest` equals the value in Appendix C.3. |
+| C-02 | §9 | Submit V-01, then V-01 again. | First `201`, second `200`. The second has the same `receipt_id`, `received_at`, `content_digest`; `idempotent_replay` true. No second receipt exists **(hook)**. |
+| C-03 | §5.7, §9 | Submit V-01, then V-06 (V-01 re-serialized). | `200` replay with the original receipt. |
 | C-04 | §9 | Submit V-01, then V-20. | Second: `409`, `RECORD_ID_CONFLICT`, `retryable` false. The stored record is still V-01 **(hook)**. |
 | C-05 | §4.5, §7.1 | Submit V-10 on an empty store, and again after V-01 is accepted. | Both: `400 SIGNATURE_INVALID`. No receipt. Nothing retrievable **(hook)**. |
 | C-06 | §4.5 | Submit V-11. | `400 KEY_UNKNOWN`. |
@@ -818,21 +819,21 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | C-11 | §5.4 | Submit V-16. | `400 SIGNATURE_MALFORMED`. |
 | C-12 | §5.6 | Submit V-17. | `400 SCHEMA_INVALID`. |
 | C-13 | §5.2 | Submit V-18 as the raw body. | `400 MALFORMED_JSON`. No record is accepted. |
-| C-14 | §7.4 | Submit V-02, then V-01. | V-02: `202`, `coverage_gap_flag` true. V-01: `202`, all flags false. Neither is rejected for arrival order. |
-| C-15 | §7.4 | Submit V-01, then V-22. | V-22: `202`, `chain_link_failure_flag` true. |
-| C-16 | §7.4 | Submit V-01, then V-21. | V-21: `202`, `equivocation_flag` true. Both records are retained **(hook)**. |
+| C-14 | §7.4 | Submit V-02, then V-01. | V-02: `201`, `coverage_gap_flag` true. V-01: `201`, all flags false. Neither is rejected for arrival order. |
+| C-15 | §7.4 | Submit V-01, then V-22. | V-22: `201`, `chain_link_failure_flag` true. |
+| C-16 | §7.4 | Submit V-01, then V-21. | V-21: `201`, `equivocation_flag` true. Both records are retained **(hook)**. |
 | C-17 | §4.2 | Submit V-01 with no token, then with an expired token. | `401 UNAUTHENTICATED`, with `WWW-Authenticate`. |
 | C-18 | §4.3 | `c-ro` submits V-01. | `403 INSUFFICIENT_SCOPE`. |
 | C-19 | §4.4 | `c-nodom` submits V-01. | `403 EVIDENCE_DOMAIN_NOT_BOUND`. |
 | C-20 | §4.5, §4.6 | `c-pep` submits V-01 and then V-10. | Both `403 SUBMITTER_NOT_AUTHORIZED`. The tampered record yields the same error as the valid one, showing authorization precedes verification. |
-| C-21 | §4.4 | `c-d2` submits V-01. Register `pdp-fleet-1` / `key-2026-01` in `D2` and resubmit. | First: `400 KEY_UNKNOWN`. Second: `202` with a first acceptance (`idempotent_replay` false) and a receipt independent of any `D1` receipt. No `D1` record, receipt, or identity is observable in either response. |
-| C-22 | §12.2 CO-1 | `c-fwd` submits V-01 and V-03 (single-record endpoint). | Both `202`. Outcomes equal those for direct submission. |
-| C-23 | §7.2 **(hook)** | Fail the durable write during V-01. | `503 COLLECTOR_UNAVAILABLE` (or `500`), `retryable` true. No receipt, record, or index entry visible. After recovery, resubmission yields `202` with `idempotent_replay` false. If the write is made to succeed but the response is lost, resubmission yields `idempotent_replay` true. |
+| C-21 | §4.4 | `c-d2` submits V-01. Register `pdp-fleet-1` / `key-2026-01` in `D2` and resubmit. | First: `400 KEY_UNKNOWN`. Second: `201` with a first acceptance (`idempotent_replay` false) and a receipt independent of any `D1` receipt. No `D1` record, receipt, or identity is observable in either response. |
+| C-22 | §12.2 CO-1 | `c-fwd` submits V-01 and V-03 (single-record endpoint). | Both `201`. Outcomes equal those for direct submission. |
+| C-23 | §7.2 **(hook)** | Fail the durable write during V-01. | `503 COLLECTOR_UNAVAILABLE` (or `500`), `retryable` true. No receipt, record, or index entry visible. After recovery, resubmission yields `201` with `idempotent_replay` false. If the write is made to succeed but the response is lost, resubmission yields `200` with `idempotent_replay` true. |
 | C-24 | §5.8 | Submit a signed record larger than `max_record_bytes` (generated by padding a signed member). | `413 RECORD_TOO_LARGE`. The Collector does not verify the signature first **(hook)**. A record of exactly `max_record_bytes` is accepted. |
 | C-25 | §5.1 | Submit V-01 with `Content-Type: text/plain`, then with an unadvertised `Content-Encoding`. | `415 UNSUPPORTED_MEDIA_TYPE`. |
-| C-26 | §4.4 | `c-pdp` submits V-05 (signed body names `evidence_domain_id: "D2"`). | `202`. The record is held in `D1` only; `D2` holds nothing **(hook)**. The body member is preserved in the stored assertion. |
-| C-27 | §9, item 6 | Send V-01 twice concurrently; separately, V-01 and V-20 concurrently. | First pair: one `idempotent_replay` false, one true, same receipt. Second pair: one `202`, one `409`. |
-| C-28 | §9, item 3 **(hook)** | Accept V-01. Revoke `key-2026-01`. Resubmit V-01. Submit V-02. | V-01: `202` replay, original receipt. V-02: `400 KEY_NOT_VALID`. |
+| C-26 | §4.4 | `c-pdp` submits V-05 (signed body names `evidence_domain_id: "D2"`). | `201`. The record is held in `D1` only; `D2` holds nothing **(hook)**. The body member is preserved in the stored assertion. |
+| C-27 | §9, item 6 | Send V-01 twice concurrently; separately, V-01 and V-20 concurrently. | First pair: one `201` (`idempotent_replay` false), one `200` (true), same receipt. Second pair: one `201`, one `409`. |
+| C-28 | §9, item 3 **(hook)** | Accept V-01. Revoke `key-2026-01`. Resubmit V-01. Submit V-02. | V-01: `200` replay, original receipt. V-02: `400 KEY_NOT_VALID`. |
 | C-29 | §10.1 | Inspect every error produced by C-04 to C-28. | `application/problem+json`; `type`, `title`, `status`, `code`, `retryable` present; no token, record content, or other-domain data. |
 | C-30 | §6.3 | Inspect `received_at` and `receipt_id` from C-01. | `received_at` matches `YYYY-MM-DDThh:mm:ss.sssZ`. `receipt_id` is a non-empty string. |
 | C-31 | §4.1 | Attempt a cleartext HTTP submission with a token. | Connection refused, or no request processing; no redirect carrying the token. |
@@ -844,19 +845,19 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 
 | ID | Requirements | Procedure | Expected |
 |---|---|---|---|
-| B-01 | §8.2, §8.3 | `c-pdp` submits `[V-01, V-10, V-02]`. | `207`. `results[0]` accepted, `results[1]` `SIGNATURE_INVALID` (status 400), `results[2]` accepted. `index` values are 0, 1, 2. V-02's `coverage_gap_flag` is false because V-01 precedes it. |
+| B-01 | §8.2, §8.3 | `c-pdp` submits `[V-01, V-10, V-02]`. | `200`. `results[0]` accepted, `results[1]` `SIGNATURE_INVALID` (status 400), `results[2]` accepted. `index` values are 0, 1, 2. V-02's `coverage_gap_flag` is false because V-01 precedes it. |
 | B-02 | §8.1 | `c-fwd` submits `[V-01, V-03]`. | `400 BATCH_MIXED_PRODUCERS`. Nothing accepted **(hook)**. |
 | B-03 | §8.1 | Submit `[]`. | `400 BATCH_EMPTY`. |
 | B-04 | §8.1 | Submit `max_batch_records + 1` records. | `400 BATCH_TOO_MANY_RECORDS`. Nothing accepted. |
 | B-05 | §8.1 | Submit a body larger than `max_batch_bytes`. | `413 REQUEST_TOO_LARGE`. |
-| B-06 | §8.5, §9 | Repeat B-01. | `207`. `results[0]` and `results[2]` are `idempotent_replay` true with original receipts. `results[1]` is rejected again. |
+| B-06 | §8.5, §9 | Repeat B-01. | `200`. `results[0]` and `results[2]` are `idempotent_replay` true with original receipts. `results[1]` is rejected again. |
 | B-07 | §8.2 | Submit `[V-01, V-01]`, then (fresh store) `[V-01, V-20]`. | First: accepted, then replay of the same receipt. Second: accepted, then `409 RECORD_ID_CONFLICT` as that element's error. |
-| B-08 | §8.4 | Submit `[V-02, V-01]`. | `207`. Both accepted. V-02 `coverage_gap_flag` true. Arrival order does not cause rejection. |
-| B-09 | §8.2 | Submit `[V-01, <oversized record>, V-02]`. | `207`. The oversized element is `RECORD_TOO_LARGE`. The others are accepted. |
-| B-10 | §8.2 | Submit `[V-01, 42]`. | `207`. `results[1]` is `MALFORMED_JSON`. `results[0]` is accepted. |
+| B-08 | §8.4 | Submit `[V-02, V-01]`. | `200`. Both accepted. V-02 `coverage_gap_flag` true. Arrival order does not cause rejection. |
+| B-09 | §8.2 | Submit `[V-01, <oversized record>, V-02]`. | `200`. The oversized element is `RECORD_TOO_LARGE`. The others are accepted. |
+| B-10 | §8.2 | Submit `[V-01, 42]`. | `200`. `results[1]` is `MALFORMED_JSON`. `results[0]` is accepted. |
 | B-11 | §8.1 | `c-pep` submits `[V-01]`. | `403 SUBMITTER_NOT_AUTHORIZED`, request level. |
-| B-12 | §8.3 **(hook)** | Fail the durable write for one element only. | `207`. That element is `COLLECTOR_UNAVAILABLE`, `retryable` true. Other elements are accepted. |
-| B-13 | §8.3 | Submit a batch where all elements are valid. | `207` (not `200`, not `202`). |
+| B-12 | §8.3 **(hook)** | Fail the durable write for one element only. | `200`. That element is `COLLECTOR_UNAVAILABLE`, `retryable` true. Other elements are accepted. |
+| B-13 | §8.3 | Submit a batch where all elements are valid. | `200` (not `201`, `202`, or `207`). |
 | B-14 | §8.2 | Submit `[V-01, V-02]`. Record the order of acceptance **(hook)**. | `results` is in request order regardless of internal processing order. |
 
 ### 15.5 Discovery tests
@@ -879,7 +880,7 @@ Vector identifiers (`V-nn`) refer to Appendix C.
 | P-01 | §5.4 | Verify a producer's output for V-01's content class with the public key. | Ed25519 signature verifies over JCS minus `signature`; `kid` is inside the signed scope; signature is unpadded base64url. |
 | P-02 | §5.6 | Generate 10,000 records. | Every `record_id` is a lowercase UUID or an uppercase ULID, and is unique for the producer. |
 | P-03 | §5.5 | Compare the producer's own `content_digest` with the receipt's. | Equal, or the producer reports a mismatch as an error. |
-| P-04 | §10.3 | Stub returns `503` twice, then `202`. | The producer resubmits identical bytes, with increasing delays, and records success only after the `202`. |
+| P-04 | §10.3 | Stub returns `503` twice, then `201`. | The producer resubmits identical bytes, with increasing delays, and records success only after the `201`. |
 | P-05 | §10.3 | Stub returns `429` with `Retry-After: 2`. | The producer waits at least 2 s. |
 | P-06 | §10.3 | Stub returns a terminal `400`. | The producer does not resubmit unchanged and surfaces the `code`. |
 | P-07 | §10.3 | Stub drops the connection after reading the request. | The producer resubmits the same bytes. |
@@ -983,7 +984,7 @@ Content-Type: application/json
 
 {"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-a","sequence_number":1,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"signature":"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw"}
 
-HTTP/1.1 202 Accepted
+HTTP/1.1 201 Created
 Content-Type: application/json
 
 {"accepted":true,"producer_id":"pdp-fleet-1","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","content_digest":"sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226","receipt_id":"108422","received_at":"2026-06-11T00:42:23.456Z","idempotent_replay":false,"coverage_gap_flag":false,"chain_link_failure_flag":false,"equivocation_flag":false,"late_flag":false}
@@ -994,7 +995,7 @@ Content-Type: application/json
 Resubmitting V-01 (in any JSON formatting):
 
 ```http
-HTTP/1.1 202 Accepted
+HTTP/1.1 200 OK
 Content-Type: application/json
 
 {"accepted":true,"producer_id":"pdp-fleet-1","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","content_digest":"sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226","receipt_id":"108422","received_at":"2026-06-11T00:42:23.456Z","idempotent_replay":true,"coverage_gap_flag":false,"chain_link_failure_flag":false,"equivocation_flag":false,"late_flag":false}
@@ -1023,13 +1024,13 @@ Content-Type: application/problem+json
 ### A.6 Out-of-order chain (vector V-02 first)
 
 ```http
-HTTP/1.1 202 Accepted
+HTTP/1.1 201 Created
 Content-Type: application/json
 
 {"accepted":true,"producer_id":"pdp-fleet-1","record_id":"0191f3a0-7b1f-7d3b-8e52-4b3a8c1d0e52","content_digest":"sha256:ad48f69db6bf6f789871edf3dfe48f340174d9a30217cd2789f8a0e043c0ea00","receipt_id":"108423","received_at":"2026-06-11T00:42:24.101Z","idempotent_replay":false,"coverage_gap_flag":true,"chain_link_failure_flag":false,"equivocation_flag":false,"late_flag":false}
 ```
 
-The record is accepted with `coverage_gap_flag: true`. It is not rejected. When V-01 later arrives it is accepted normally.
+The record is accepted (`201`) with `coverage_gap_flag: true`. It is not rejected. When V-01 later arrives it is accepted normally.
 
 ### A.7 Mixed batch (vectors V-01, V-10, V-02)
 
@@ -1040,7 +1041,7 @@ Content-Type: application/json
 
 [ V-01, V-10, V-02 ]
 
-HTTP/1.1 207 Multi-Status
+HTTP/1.1 200 OK
 Content-Type: application/json
 
 {"results":[
@@ -1104,8 +1105,9 @@ paths:
       operationId: submitTraceRecord
       summary: Submit one signed TRACE record
       description: |
-        Returns 202 only after the record is verified and durably accepted (specification section 8).
-        An identical resubmission returns the original receipt with `idempotent_replay: true`.
+        Returns 201 only after the record is verified and durably accepted (specification section 7).
+        An identical resubmission returns 200 with the original receipt and `idempotent_replay: true`.
+        202 is intentionally not used.
       security:
         - oauth2: [trace.write]
         - bearerAuth: []
@@ -1120,8 +1122,8 @@ paths:
                 summary: PDP AUTHORIZATION_DECISION (vector R1)
                 value: {"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-a","sequence_number":1,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"signature":"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw"}
       responses:
-        '202':
-          description: Record durably accepted, or an identical record was already accepted.
+        '201':
+          description: First durable acceptance.
           content:
             application/json:
               schema:
@@ -1136,6 +1138,26 @@ paths:
                     receipt_id: '108422'
                     received_at: '2026-06-11T00:42:23.456Z'
                     idempotent_replay: false
+                    coverage_gap_flag: false
+                    chain_link_failure_flag: false
+                    equivocation_flag: false
+                    late_flag: false
+        '200':
+          description: Idempotent replay. The original receipt is returned unchanged except for `idempotent_replay`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptanceReceipt'
+              examples:
+                replay:
+                  value:
+                    accepted: true
+                    producer_id: pdp-fleet-1
+                    record_id: 0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41
+                    content_digest: sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226
+                    receipt_id: '108422'
+                    received_at: '2026-06-11T00:42:23.456Z'
+                    idempotent_replay: true
                     coverage_gap_flag: false
                     chain_link_failure_flag: false
                     equivocation_flag: false
@@ -1155,7 +1177,7 @@ paths:
       operationId: submitTraceRecordBatch
       summary: Submit a batch of signed TRACE records
       description: |
-        Each record is processed independently (specification section 9). The response is 207 whenever
+        Each record is processed independently (specification section 8). The response is 200 whenever
         the batch envelope was valid and the Collector could process it, even if every record was rejected.
       security:
         - oauth2: [trace.write]
@@ -1174,7 +1196,7 @@ paths:
                 summary: One valid record and one record altered after signing (vectors V-01 and V-10)
                 value: [{"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"ALLOW"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-a","sequence_number":1,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"signature":"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw"}, {"producer":"pdp-fleet-1","kid":"key-2026-01","record_id":"0191f3a0-7b1e-7c2a-9d41-3a2f7b0c9d41","trace":{"eat_profile":"tag:govops.owasp.org,2026:trace-v1","event_kind":"AUTHORIZATION_DECISION","signed_at":1781138542,"trace_execution_id":"exec-123","execution_authority":"payments-gateway","subject":{"workload_id":"spiffe://example.org/service/payments-gateway"},"event":{"decision":{"action":"Acme::Action::\"ApprovePayment\"","resource_type":"Acme::Payment","outcome":"DENY"},"tokens":[{"issuer":"https://accounts.example.org","token_type":"access_token","jti":"9c9f2e77-9a3e-4b62-9a2a-2f6e6e2a9f3e"}]},"policy":{"policy_store_id":"https://example.org/policy-stores/payments","policy_store_version":"1.2.3","policy_language":"cedar","policy_language_version":"4.4.0","bundle_hash":"sha256:6cd416d52176b7d2fb8132025f55a42443910cc8d9f2b3f1d19b98b090c2d928"},"runtime":{"pdp_id":"pdp-001"}},"producer_chain":{"producer_id":"pdp-fleet-1","producer_instance_id":"pdp-001","producer_chain_id":"chain-pdp-001-a","sequence_number":1,"prev_record_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},"parent_record_ids":[],"signature":"NCteOEnLP7tcVEuDJ95lgP_DFIaz3--j2nlcRQm-2nvOnsTTHdg-WVps3e-H4PD8qC5YEjMxi805YUTJ-sB6Bw"}]
       responses:
-        '207':
+        '200':
           description: Batch processed. Each element of `results` corresponds to the request element at `index`.
           content:
             application/json:
@@ -1642,7 +1664,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Valid `AUTHORIZATION_DECISION`, genesis of chain `chain-pdp-001-a`, execution `exec-123`.
 - **Precondition:** empty store
 - **Submitter:** `c-pdp`
-- **Expected:** `202`; all flags false; `content_digest` = `sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226`.
+- **Expected:** `201`; all flags false; `content_digest` = `sha256:c849281f3c5ef69a204c28cf8a3036092b159ffa782b2bee11d3513fd4455226`.
 - **Used by:** C-01, C-02, C-03, C-04, C-05, C-15, C-16, C-21, C-22, C-27, C-28, C-30, B-01, B-06, B-07
 
 ```json
@@ -1701,7 +1723,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Valid `AUTHORIZATION_DECISION`, chain position 2 (`prev_record_hash` = digest of V-01), `DENY`, execution `exec-124`.
 - **Precondition:** empty store, or V-01 accepted
 - **Submitter:** `c-pdp`
-- **Expected:** Empty store: `202`, `coverage_gap_flag` true. After V-01: `202`, all flags false.
+- **Expected:** Empty store: `201`, `coverage_gap_flag` true. After V-01: `201`, all flags false.
 - **Used by:** C-14, C-28, B-01, B-08
 
 ```json
@@ -1713,7 +1735,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Valid `CAPABILITY_INVOKED` from a different producer and key, with an `authorized` parent edge to V-01.
 - **Precondition:** any
 - **Submitter:** `c-pep` or `c-fwd`
-- **Expected:** `202`; all flags false.
+- **Expected:** `201`; all flags false.
 - **Used by:** C-22, C-34, B-02
 
 ```json
@@ -1725,7 +1747,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Valid record whose `issuer` value contains non-ASCII characters (`é` and U+1F512, a surrogate pair in UTF-16). Chain `chain-pdp-001-u`.
 - **Precondition:** any
 - **Submitter:** `c-pdp`
-- **Expected:** `202`. The delivered JCS form must equal the source (FW-4).
+- **Expected:** `201`. The delivered JCS form must equal the source (FW-4).
 - **Used by:** F-01
 
 ```json
@@ -1737,7 +1759,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Valid record that carries a signed top-level `evidence_domain_id: "D2"`. Chain `chain-pdp-001-d`.
 - **Precondition:** any
 - **Submitter:** `c-pdp` (bound to `D1`)
-- **Expected:** `202`. Held in `D1`. The body member is ignored for partitioning and preserved.
+- **Expected:** `201`. Held in `D1`. The body member is ignored for partitioning and preserved.
 - **Used by:** C-26
 
 ```json
@@ -1749,7 +1771,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** V-01 re-serialized: top-level members in reverse order, 4-space indentation. Semantically identical.
 - **Precondition:** V-01 accepted
 - **Submitter:** `c-pdp`
-- **Expected:** `202` replay: original receipt, `idempotent_replay` true.
+- **Expected:** `200` replay: original receipt, `idempotent_replay` true.
 - **Used by:** C-03, F-01
 
 ```json
@@ -1928,7 +1950,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Different `record_id`, same chain position as V-01 (`chain-pdp-001-a`, `sequence_number` 1), `DENY`, correctly signed.
 - **Precondition:** V-01 accepted
 - **Submitter:** `c-pdp`
-- **Expected:** `202`, `equivocation_flag` true. Both records retained.
+- **Expected:** `201`, `equivocation_flag` true. Both records retained.
 - **Used by:** C-16
 
 ```json
@@ -1940,7 +1962,7 @@ Preconditions use the fixture in §15.2. "Used by" lists the tests in §15 that 
 - **Purpose:** Chain position 2 on `chain-pdp-001-a`, but `prev_record_hash` is `sha256:` + 64 `a`; correctly signed.
 - **Precondition:** V-01 accepted
 - **Submitter:** `c-pdp`
-- **Expected:** `202`, `chain_link_failure_flag` true.
+- **Expected:** `201`, `chain_link_failure_flag` true.
 - **Used by:** C-15
 
 ```json
