@@ -11,6 +11,8 @@ The MVP answers four practical questions about a governed agent action:
 3. What did each evidence producer sign?
 4. Which records belong to the same governed execution?
 
+The ingestion interface is also specified vendor-neutrally in the GovOps TRACE Collector API (`govops-trace-collector-api.md`). §17 lists where this MVP differs from it.
+
 The MVP provides attributable, tamper-evident records and basic correlation. It does **not** claim that an execution's evidence is complete, that a producer reported every event, or that a recorded action caused a claimed real-world effect.
 
 ## 2. MVP outcome
@@ -109,7 +111,7 @@ One Lock deployment may collect evidence for several organizations, environments
 
 Lock determines the domain from the authenticated submitting client and that client's configured domain binding. The producer does not choose the domain by placing a value in the record. Otherwise, a producer could claim another domain's identifier and attempt to write into its namespace.
 
-Lock MUST NOT derive `evidence_domain_id` from the submitted assertion. If the body contains that field, Lock must either reject the request or ignore the field and flag the attempt; it must never use the submitted value for routing or storage.
+Lock MUST NOT derive `evidence_domain_id` from the submitted assertion. If the body contains that field, Lock ignores it for every purpose, flags the attempt (`reserved_member_flag`, §10), and preserves the member unchanged in the signed assertion; it never uses the submitted value for routing or storage and does not reject the record for it.
 
 Within Lock, the derived domain scopes producer-key lookup, record identity, execution correlation, indexes, and retrieval. A producer key registered in one evidence domain grants no authority in another. A producer serving several domains must have an explicit registration in each one.
 
@@ -248,7 +250,7 @@ The following is the MVP wire shape. Fields shown as `null` may be omitted unles
   "parent_record_ids": [
     {
       "producer_id": "jans-auth-server",
-      "record_id": "R-token-issued-001",
+      "record_id": "0191f3a0-7b40-7a11-8b01-0a1b2c3d4e01",
       "relationship_type": "issued_token"
     }
   ],
@@ -263,7 +265,7 @@ The following is the MVP wire shape. Fields shown as `null` may be omitted unles
 | `producer` | Required. **Stable logical producer identifier** (e.g. `cedarling-fleet-1`), not a `name/semver` string: 1 to 255 characters, a letter or digit followed by letters, digits, and `. _ : / -`, compared byte for byte and never normalized. Must equal `producer_chain.producer_id` byte-for-byte. Software version/build/runtime, when carried, travel as separate signed metadata, never folded into `producer_id`. |
 | `producer_version` | Optional top-level string of 1 to 255 characters. A build label: signed and stored unchanged, never interpreted by Lock. The record format is versioned by `trace.eat_profile`, not by this member. |
 | `kid` | Required and signed. Selects the registered verification key. |
-| `record_id` | Required and producer-generated UUID or ULID. |
+| `record_id` | Required and producer-generated UUID or ULID. The Collector API requires one text form so that a single identifier cannot appear under two identities: a lowercase canonical UUID, or an uppercase ULID, compared as an exact string (profile §1). §17 lists whether Lock enforces the case rule. |
 | `trace.eat_profile` | Required and fixed to the supported TRACE profile version. |
 | `trace.event_kind` | Required and limited to the MVP event catalog below. |
 | `trace.signed_at` | Required NumericDate. Producer time; not treated as receipt time. A value more than a configurable skew (default 300 s) ahead of Lock's clock is rejected; a past value never is (lateness only sets `late_flag`). |
@@ -274,7 +276,7 @@ The following is the MVP wire shape. Fields shown as `null` may be omitted unles
 | `trace.event` | Required; shape depends on `event_kind`. |
 | `producer_chain` | Required. Identifies the producer-local chain and position. |
 | `parent_record_ids` | Optional array of typed causal references. Empty array is valid. |
-| `signature` | Required base64url Ed25519 signature. |
+| `signature` | Required unpadded base64url Ed25519 signature (64 bytes). |
 
 Requiring the execution ID at ingestion deliberately avoids correlation-backfill behavior in Phase 1.
 
@@ -359,7 +361,7 @@ Each producer instance maintains one or more chains. Lock does not impose a glob
 - A producer instance MAY own **more than one chain concurrently**: the model is `producer_id → producer_instance_id → one or more producer_chain_id values`. Each record belongs to exactly one chain and each chain stays strictly linear, but a busy instance (e.g. an embedded Cedarling handling many concurrent `authorize_*` calls) MAY allocate chains by worker, partition, thread, or execution lane so concurrent writers do not contend on one serialized sequence allocator. TRACE does not claim a total order within an instance; cross-chain ordering comes from causal links and `trace_execution_id`.
 - `sequence_number` increases by one within one chain.
 - `prev_record_hash` is the prior position's `content_digest`.
-- The genesis record uses `sequence_number: 1` and the configured all-zero predecessor sentinel.
+- The genesis record uses `sequence_number: 1` and the all-zero predecessor sentinel, which is the fixed value `sha256:` followed by 64 zeros (`govops-trace-profile.md` §15). It is not configurable.
 
 **Genesis authentication.** The signing **key** is always administratively registered first (§6); genesis authentication is a separate question about the *chain*. For deployments needing stronger lineage assurance, a chain genesis is **pre-registered** with Lock (`pre_registered_genesis`). Otherwise, when Lock runs in `FIRST_OBSERVED` mode (below), an already-registered key MAY open a new chain simply by submitting its first signed record, which Lock anchors at first sight as `first_observed_genesis`. A first-observed chain establishes tamper-evident history from the moment Lock sees it, but cannot establish complete producer history before that point.
 
@@ -708,3 +710,33 @@ Phase 2 can add signed settlement assessments, receipt checkpoints, richer retri
 The AIMS/WIMSE identity and lifecycle features layer onto these phases without altering the MVP's accepted assertions: the WIMSE Agent Identifier profile and the AIMS-recognized credential metadata on `tokens[]`; the `workload_authentication` record of how a workload authenticated; credential-provisioning/posture evidence (`CREDENTIAL_PROVISIONED`); user-confirmation-vs-authorization evidence (`USER_CONFIRMATION_RECORDED` with the `APPROVAL_GRANTED` authorization-grant binding); token-exchange/transaction-token lineage and the forwarded-access-token anti-pattern finding; security-signal and remediation evidence (`SECURITY_SIGNAL_RECEIVED` / `REMEDIATION_APPLIED`); and the AIMS evidence-completeness profile that checks an execution against the AIMS audit minimum. Each is an additive `event_kind`, optional field, or Lock-derived assessment.
 
 All later features should remain additive: they may assess, correlate, checkpoint, or package an accepted assertion, but must never rewrite it.
+
+## 17. Alignment with the GovOps TRACE Collector API
+
+This MVP describes the implemented Lock. The vendor-neutral standard (`govops-trace-collector-api.md`) and its conformance suite (`conformance/`) differ in the places below. `govops-trace-collector-lock-mapping.md` carries the full table (rows D1 to D20) and a proposed resolution for each. The MVP is not changed to match the standard until Lock is.
+
+| Topic | This MVP | Standard | Mapping row |
+|---|---|---|---|
+| Acceptance status | `202` (§11.1) | `201` first acceptance, `200` replay | D1 |
+| Bulk status | `207` (§11.2) | `200` | D2 |
+| Error body | `{error, error_description, reason}` (§11.1) | RFC 9457 Problem Details with `code` and `retryable` | D3 |
+| Storage failure | `500 storage_failure` (§11.1, §12) | `503 COLLECTOR_UNAVAILABLE` (retryable), `500` otherwise | D4 |
+| Oversize bulk | `400` (§14) | `413` for bytes, `400` for counts | D5 |
+| Receipt members | `receipt_sequence`, no `receipt_id` (§11.1) | `receipt_id` and `received_at` required | D6 |
+| Flags on replay | The flags stored now, which neighbor updates can change (§8) | The flags as of original acceptance | D7 |
+| Replay versus key validity | The key check (§5 step 5) runs before the idempotency check (step 8) | Replay is detected before key checks | D8 |
+| Chain admission | `PRE_REGISTERED` (default) matches the standard's pre-registered-only variant. `FIRST_OBSERVED` admits only a genesis record (§8). | A first-sight Collector admits a non-genesis record and flags a gap | D9 |
+| Sentinel or position mismatch | `400 invalid_genesis` (§8) | Accepted with `chain_link_failure_flag` | D10 |
+| Future `signed_at` | Rejected beyond the skew (§7.1) | A claim only; no rejection defined | D11 |
+| `producer` format | Restricted character set (§7.1) | Opaque string | D12 |
+| Array limits | 256 elements (§14) | Profile maximums (`tokens[]` 32, `decisions[]` 128, and so on) | D13 |
+| Submitter identity | The authenticated client (§4.1, §4.2) | `(issuer, client_id)` | D14 |
+| Replay retention | Not published | `idempotency_retention_seconds` | D15 |
+| Discovery | `/.well-known/lock-server-configuration` (§11.7) | `/.well-known/govops-trace-configuration` | D16 |
+| Profile tag | `tag:jans.io,2026:trace-v1` only | `trace_profiles` lists every accepted tag; vectors use the GovOps tag | D17 |
+| Receipt lookup | Not offered | Optional | D18 |
+| Failed write | A record stays stored when the late-insert race leaves its receipt entry `VOID` (§9, §12). The request fails and the identity stays blocked until an operator acts. | A record that was not acknowledged MUST NOT remain visible (DUR-005), and a resubmission must be a first acceptance | D19 |
+| Missing execution context | Rejected (§7.1, §12) | Published as `execution_correlation_required: true` | D20 |
+
+Conforms without change: strict JSON, per-record bulk results in array order, `409` on a different digest, equivocation stored and flagged, evidence domain derived from the authenticated client with a body value ignored, key validity judged on Lock's clock, and the cryptographic suite. To check in the code: the `record_id` case rule and that `signed_at` is never used for key validity.
+
