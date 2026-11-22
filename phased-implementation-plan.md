@@ -1,6 +1,6 @@
 # TRACE Phased Implementation Plan
 
-TRACE is implemented incrementally. Each phase builds on the same signed-record model, so an MVP delivers useful evidence without requiring every assurance feature at launch. The phase boundaries below are reconciled with the current scope of `Lock-Server-TRACE-MVP-Design.md` (Phase 1 = the MVP) and `design.md` (the full design). **Those documents are authoritative**; this plan is a roadmap, so each item below names a capability and points at the design for its detail rather than restating field-level mechanics.
+TRACE is implemented incrementally. Each phase builds on the same signed-record model, so an MVP delivers useful evidence without requiring every assurance feature at launch. The phase boundaries below are reconciled with the current scope of `Lock-Server-TRACE-MVP-Design.md` (Phase 1 = the MVP) and `design.md` (the full design). **Those documents are authoritative**; this plan is a roadmap, so each item below names a capability and points at the design for its detail rather than restating field-level mechanics. The ingestion interface (endpoints, statuses, errors, idempotency, discovery) is specified by the vendor-neutral GovOps TRACE Collector API (`govops-trace-collector-api.md`), the record profile by `govops-trace-profile.md`, and where the implemented Lock differs from them `govops-trace-collector-lock-mapping.md` lists the gaps and open decisions.
 
 Each phase preserves backward compatibility with previously accepted records. Advanced features strengthen the evidence and its assurance level; they never change or rewrite the original signed assertions.
 
@@ -22,13 +22,14 @@ Each phase preserves backward compatibility with previously accepted records. Ad
 - **Lock-derived evidence-domain isolation** — `evidence_domain_id` from the authenticated client, never the record body.
 - **Signature, identity, and schema validation** — Ed25519 over RFC 8785 (JCS), `kid`-selected key, and the `signature_valid`/`identity_sound` admission gates.
 - **Immutable preservation of producer assertions** — the signed `assertion` is byte-immutable; all Lock-derived data lives outside it.
-- **Producer-chain sequencing** — `producer_chain_id`/`sequence_number`/`prev_record_hash`, one or more chains per producer instance, with `first_observed` genesis acceptable.
+- **Producer-chain sequencing** — `producer_chain_id`/`sequence_number`/`prev_record_hash`, one or more chains per producer instance, with `first_observed` genesis acceptable. Chain admission (pre-registered only, or first sight) is a published Collector setting and the only chain-related rejection; gaps, link failures, and equivocation are flags (Collector API §7.4).
 - **A Lock receipt hash chain** — the per-domain ingestion ledger (`receipt_sequence`/`received_at` at millisecond precision/`prev_receipt_hash`), assigned to each accepted record (claimed, then settled; Lock MVP §9).
 - **Ingestion-time integrity flagging** — coverage-gap, chain-link-failure, equivocation, and late-arrival, each surfaced rather than silently dropped or resolved.
 - **Correlation** by `(evidence_domain_id, execution_authority, trace_execution_id)`, required at ingestion (no unattributed-evidence/backfill path in the MVP).
 - **Signed capability facts and effect state** — `AUTHORIZATION_DECISION` signs a `decision` and `CAPABILITY_INVOKED` an `invocation` (`{action, resource_type, outcome}`, singular by default, batch form optional); `RUNTIME_EFFECT` carries the required `effect_status` discriminator with the confirmed-effect invariant (a `confirmed` effect must bind a `result_digest` — a bytes-only check). The `capability_id` label is Lock-derived and its resolution/index are deferred (see `design.md`: Capability Resolution).
 - **Retrieval by record and execution** — capability, workload, session, transaction, and token retrieval are deferred.
 - **Structured errors and idempotent replay.**
+- **Collector API conformance (Phase 1 exit gate).** Lock publishes the metadata document (`/.well-known/govops-trace-configuration`), identifies the submitter as `(issuer, client_id)`, returns `201`/`200` and Problem Details errors, detects replay before key validity, publishes `idempotency_retention_seconds`, and passes the standard's conformance suite (`conformance/`) in CI, with any test that lacks a hook reported as unverified. The differences and open decisions are in `govops-trace-collector-lock-mapping.md` §2 (D1 to D20). Producers (Cedarling, Auth Server, FIDO Server) conform as the Producer class: same-byte retry with jittered backoff, canonical `record_id`, and discovery through the metadata document.
 
 > The **receipt hash chain** is Phase 1; the **signed receipt checkpoint** over it (the externally-anchorable commitment) is Phase 2 — the ledger exists before the commitment over it does.
 
@@ -37,7 +38,9 @@ Each phase preserves backward compatibility with previously accepted records. Ad
 **Lets Lock distinguish a *submitted claim* from *evidence it has independently validated and settled*.** It adds the Lock-attested assessment layer over the Phase 1 ledger. (Equivocation, coverage-gap, and late-arrival reporting are Phase 1, not here.)
 
 - **Lock-signed settlement** — the per-record `submitted` → `settled` lifecycle over the settlement checks, first pass synchronous and re-settlement asynchronous as later evidence arrives (see `design.md`: Settlement; the checks split into bytes-only **Class-1** and state-dependent **Class-2**).
-- **Signed receipt checkpoints** over the receipt ledger, using a Lock-owned ledger-signing key.
+- **Signed receipt checkpoints** over the receipt ledger, using a Lock-owned ledger-signing key. The receipt chain stays Collector-internal in the Collector API; checkpoints are an extension, not a requirement of the standard.
+- **Asynchronous integrity assessment.** Settlement and re-settlement can move chain assessment after durable acceptance. A Collector that does so publishes `synchronous_integrity_flags: false` and omits the four flags from its receipt (Collector API §7.4.5). The MVP's synchronous flags and `design.md` Property 17 must be relaxed together if Lock takes this step.
+- **Optional receipt lookup** (`GET /api/v1/audit/trace/receipts/{producer_id}/{record_id}`, Collector API §7.3.1), so producers that deliver through OpenTelemetry or Kafka can reconcile without the broad `trace.readonly` scope.
 - **Key rotation and revocation handling** beyond basic validity — `kid`-based rotation-overlap selection and the TRACE v0.2 §3.2.3 revocation rule, with historical results immune to later revocation.
 - **Trust-tier assignment** and the per-dimension verification vector (Lock-assigned, never producer-declared).
 
@@ -50,7 +53,7 @@ Each phase preserves backward compatibility with previously accepted records. Ad
 - **Token enrichment** and **decision-time token-validation evidence**, and token-exchange/transaction-token lineage.
 - **Operation-binding commitments** (`request_digest`/`tool_call_digest`/`result_digest`, and proof-of-possession binding).
 - **Evidence-origin classification** (`evidence_origin`/`measurement_point`/`recorder`, and `effect_attestation` grading of who observed an effect) and the richer retrieval dimensions.
-- **Disconnected candidate-record handling** and late-arrival correlation, including `CORRELATION_ASSERTED` backfill of previously-unattributed evidence.
+- **Disconnected candidate-record handling** and late-arrival correlation, including `CORRELATION_ASSERTED` backfill of previously-unattributed evidence. Accepting records without an execution pair means publishing `execution_correlation_required: false` and returning `unattributed_flag` in the receipt (Collector API §7.5).
 
 ## Phase 4 — Full Assurance
 
@@ -63,6 +66,7 @@ Each phase preserves backward compatibility with previously accepted records. Ad
 - **High-risk assurance-requirement profiles**, **independent checkpoint signing**, and optional **external anchoring** — the TRACE transparency profile, whose standards-track concrete form is CLL-over-MMR checkpoints registered to a SCITT Transparency Service (see `design.md`: External Anchoring and Transparency).
 - **Attestation binding** (RATS) and the **instance-binding assessment**; **Evidence Packets** for offline verification (carrying the producer-key authorization statements and capability mapping needed to verify without reaching Lock).
 - **AIMS/WIMSE identity and lifecycle features** — the WIMSE Agent Identifier profile, credential-aware `tokens[]` metadata, `workload_authentication`, `CREDENTIAL_PROVISIONED`, confirmation-vs-authorization, and security-signal/remediation pairs.
+- **Additional record profiles and intermediaries.** A new profile (for example hardware-backed ECDSA signatures, `hardware-anchored-identity.md`) is listed in `trace_profiles` and needs no new Collector API version (§5.3). Forwarders for OpenTelemetry and Kafka follow the standard's Forwarder class (§12), including its replay-window rule (§9.4).
 - Where applicable, **Lock-as-PEP self-emission** for its own endpoints, once the self-reference and producer-key-vs-settlement-key hygiene constraints are resolved.
 
 ## Compatibility principle (all phases)
@@ -75,3 +79,4 @@ Every phase preserves backward compatibility with previously accepted records. T
 - `design.md` — the full TRACE design Phases 2–4 draw from: settlement, completeness, delegation, trust boundaries, anchoring, and the alignment sections (TRACE v0.2, Canonical Payload Binding, the CAN/WHO/WHAT/AUDIT composition model).
 - `cedarling-trace-design.md`, `auth-server-trace-design.md`, `fido-trace-design.md` — per-producer phased adoption, consistent with these phases.
 - `jans-trace-core-mvp-design.md` — the deterministic signing/receipt-hash library underpinning Phase 1.
+- `govops-trace-collector-api.md`, `govops-trace-profile.md`, `govops-trace-collector-lock-mapping.md`, `conformance/` — the vendor-neutral ingestion interface, the record profile and its cryptographic suite, Lock's gaps against them, and the machine-readable conformance tests.
